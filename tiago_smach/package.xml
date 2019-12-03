@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>tiago_smach</name>
+  <version>0.0.0</version>
+  <description>The tiago_smach package</description>
+
+  <maintainer email="5305@pw.edu.pl">Dawid Seredynski</maintainer>
+
+
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>actionlib</depend>
+  <depend>actionlib_msgs</depend>
+  <depend>rosplan_tiago_core_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>rosplan_dispatch_msgs</depend>
+  <depend>rosplan_knowledge_msgs</depend>
+  <depend>rosplan_planning_system</depend>
+  <depend>play_motion_msgs</depend>
+  <depend>move_base_msgs</depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf</depend>
+</package>

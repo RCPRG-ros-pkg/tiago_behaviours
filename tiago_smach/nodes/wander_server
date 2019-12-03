@@ -1,0 +1,95 @@
+#!/usr/bin/env python
+import rospy
+import smach
+import smach_ros
+
+from tiago_behaviours_msgs.msg import WanderAction
+
+import tiago_smach.wander
+
+'''
+class WanderServer(smach.StateMachine):
+    def __init__(self):
+        smach.StateMachine.__init__(self,
+                                    outcomes=['PREEMPTED',
+                                              'FAILED',
+                                              'APPROACHED'],
+                                    input_keys=['sm_goal'],
+                                    output_keys=[])
+
+        # Fill the machine here
+        with self:
+            smach.StateMachine.add('Initialize',
+                                   Initialize(),
+                                   transitions={'ok': 'SetDefaultHeight',
+                                                'preemption': 'PREEMPTED',
+                                                'error': 'FAILED'},
+                                   remapping={'init_goal': 'sm_goal',
+                                              'init_goal_pose': 'sm_goal_pose',
+                                              'init_params': 'sm_params'})
+
+            smach.StateMachine.add('SetDefaultHeight',
+                                   common_sm_states.SetHeight(0.2),
+                                   transitions={'ok': 'ReleaseHead',
+                                                'preemption': 'PREEMPTED',
+                                                'error': 'FAILED'},
+                                   remapping={})
+
+            smach.StateMachine.add('ReleaseHead',
+                                   common_sm_states.ReleaseHead(None),
+                                   transitions={'ok': 'SetDefaultParams',
+                                                'preemption': 'PREEMPTED',
+                                                'error': 'FAILED'},
+                                   remapping={})
+
+            smach.StateMachine.add('SetDefaultParams',
+                                   common_sm_states.SetNavParams(0.5, 0.2),
+                                   transitions={'ok': 'Navigate',
+                                                'preemption': 'PREEMPTED',
+                                                'error': 'FAILED'},
+                                   remapping={'set_def_params': 'sm_params'})
+
+            smach.StateMachine.add('Navigate',
+                                   Navigate(),
+                                   transitions={'ok': 'Finalize',
+                                                'preemption': 'PREEMPTED',
+                                                'error': 'FAILED'},
+                                   remapping={'nav_goal_pose': 'sm_goal_pose'})
+
+            smach.StateMachine.add('Finalize',
+                                   Finalize(),
+                                   transitions={'preemption': 'PREEMPTED',
+                                                'error': 'FAILED',
+                                                'ok': 'APPROACHED'},
+                                   remapping={})
+'''
+
+def main():
+    rospy.init_node('wander_server')
+
+    # Construct state machine
+    sm = tiago_smach.wander.Wander()
+
+    # # Smach viewer
+    sis = smach_ros.IntrospectionServer('wander_server', sm, '/SM_WANDER_SERVER')
+    sis.start()
+
+    # Construct action server wrapper
+    asw = smach_ros.ActionServerWrapper(
+        server_name='wander',
+        action_spec=WanderAction,
+        wrapped_container=sm,
+        succeeded_outcomes=['APPROACHED'],
+        aborted_outcomes=['FAILED'],
+        preempted_outcomes=['PREEMPTED'],
+        goal_key='sm_goal')
+        # feedback_key='sm_feedback',
+        # result_key='sm_result')
+
+    # Run the server in a background thread
+    asw.run_server()
+    rospy.spin()
+    sis.stop()
+
+if __name__ == '__main__':
+    main()
