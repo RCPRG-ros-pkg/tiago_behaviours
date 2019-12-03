@@ -15,8 +15,9 @@ from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
 from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
 from pal_common_msgs.msg import *
 from geometry_msgs.msg import Pose
+import std_srvs.srv as std_srvs
 
-NAVIGATION_MAX_TIME_S = 200
+NAVIGATION_MAX_TIME_S = 100
 
 class SetNavParams(smach.State):
     def __init__(self):
@@ -86,14 +87,17 @@ class MoveTo(smach.State):
         self.is_goal_achieved = False
 
         smach.State.__init__(self,
-                             outcomes=['ok', 'preemption', 'error'],
+                             outcomes=['ok', 'preemption', 'error', 'stall'],
                              input_keys=['nav_goal_pose'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         # robot movement here - using Tiago move_base
-        pose = userdata.nav_goal_pose
+        try:
+            pose = userdata.nav_goal_pose.pose
+        except:
+            pose = userdata.nav_goal_pose
 
         goal = MoveBaseGoal()
         goal.target_pose.pose = pose
@@ -127,15 +131,53 @@ class MoveTo(smach.State):
             if loop_time_s > NAVIGATION_MAX_TIME_S:
                 # break the loop, end with error state
                 rospy.logwarn('State: Navigation took too much time, returning error')
-                return 'error'
+                client.cancel_all_goals()
+                return 'stall'
 
             rospy.sleep(0.1)
 
-        # Here check move_base DONE status
-        if self.move_base_status != GoalStatus.SUCCEEDED:
-            return 'error'
+        # Manage state of the move_base action server
 
-        return 'ok'
+        # Here check move_base DONE status
+        if self.move_base_status == GoalStatus.PENDING:
+            # The goal has yet to be processed by the action server
+            raise Exception('Wrong move_base action status: "PENDING"')
+        elif self.move_base_status == GoalStatus.ACTIVE:
+            # The goal is currently being processed by the action server
+            raise Exception('Wrong move_base action status: "ACTIVE"')
+        elif self.move_base_status == GoalStatus.PREEMPTED:
+            # The goal received a cancel request after it started executing
+            #   and has since completed its execution (Terminal State)
+            return 'preemption'
+        elif self.move_base_status == GoalStatus.SUCCEEDED:
+            # The goal was achieved successfully by the action server (Terminal State)
+            return 'ok'
+        elif self.move_base_status == GoalStatus.ABORTED:
+            # The goal was aborted during execution by the action server due
+            #    to some failure (Terminal State)
+            return 'error'
+        elif self.move_base_status == GoalStatus.REJECTED:
+            # The goal was rejected by the action server without being processed,
+            #    because the goal was unattainable or invalid (Terminal State)
+            return 'error'
+        elif self.move_base_status == GoalStatus.PREEMPTING:
+            # The goal received a cancel request after it started executing
+            #    and has not yet completed execution
+            raise Exception('Wrong move_base action status: "PREEMPTING"')
+        elif self.move_base_status == GoalStatus.RECALLING:
+            # The goal received a cancel request before it started executing,
+            #    but the action server has not yet confirmed that the goal is canceled
+            raise Exception('Wrong move_base action status: "RECALLING"')
+        elif self.move_base_status == GoalStatus.RECALLED:
+            # The goal received a cancel request before it started executing
+            #    and was successfully cancelled (Terminal State)
+            return 'preemption'
+        elif self.move_base_status == GoalStatus.LOST:
+            # An action client can determine that a goal is LOST. This should not be
+            #    sent over the wire by an action server
+            raise Exception('Wrong move_base action status: "LOST"')
+        else:
+            raise Exception('Wrong move_base action status value: "' + str(self.move_base_status) + '"')
 
     def move_base_feedback_cb(self, feedback):
         self.current_pose = feedback.base_position.pose
@@ -146,4 +188,37 @@ class MoveTo(smach.State):
         self.move_base_status = status
 
     def move_base_active_cb(self):
+        # Do nothing
         return
+
+class ClearCostMaps(smach.State):
+    def __init__(self):
+        rospy.wait_for_service('/move_base/clear_costmaps')
+        #try:
+        self.clear_costmaps = rospy.ServiceProxy('/move_base/clear_costmaps', std_srvs.Empty)
+        #except rospy.ServiceException, e:
+        #    print "Service call failed: %s"%e
+        #    self.clear_costmaps = None
+
+        smach.State.__init__(self,
+                             outcomes=['ok', 'preemption', 'error'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        self.clear_costmaps()
+        rospy.sleep(1.0)
+        return 'ok'
+
+class MoveToComplex(smach.StateMachine):
+    def __init__(self):
+        smach.StateMachine.__init__(self, outcomes=['ok', 'preemption', 'error'],
+                                            input_keys=['nav_goal_pose'])
+
+        with self:
+            smach.StateMachine.add('MoveTo', MoveTo(), transitions={'ok':'ok', 'preemption':'preemption', 'error': 'error', 'stall':'ClearCostMaps'},
+                                        remapping={'nav_goal_pose':'nav_goal_pose'})
+            smach.StateMachine.add('ClearCostMaps', ClearCostMaps(), transitions={'ok':'MoveTo', 'preemption':'preemption', 'error': 'error'})
+            #smach.StateMachine.add('Rotate120deg_a', Rotate120deg(), transitions={'ok':'Rotate120deg_b', 'preemption':'preemption', 'error': 'error'})
+            #smach.StateMachine.add('Rotate120deg_b', Rotate120deg(), transitions={'ok':'Rotate120deg_c', 'preemption':'preemption', 'error': 'error'})
+            #smach.StateMachine.add('Rotate120deg_c', Rotate120deg(), transitions={'ok':'ok', 'preemption':'preemption', 'error': 'error'})

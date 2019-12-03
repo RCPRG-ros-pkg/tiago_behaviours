@@ -77,7 +77,7 @@ class Wander(smach.StateMachine):
             smach.StateMachine.add('SetNavParams', navigation.SetNavParams(), transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                         remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
             smach.StateMachine.add('PickPose', PickPose(), transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
-            smach.StateMachine.add('MoveTo', navigation.MoveTo(), transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'}, remapping={'nav_goal_pose':'pose'})
+            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(), transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'}, remapping={'nav_goal_pose':'pose'})
             #smach.StateMachine.add('Finalize', Finalize(), transitions={'preemption': 'PREEMPTED',
             #                                                'error': 'FAILED',
             #                                                'ok': 'APPROACHED'})

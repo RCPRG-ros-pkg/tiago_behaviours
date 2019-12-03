@@ -13,7 +13,9 @@ add_action_files(
   DIRECTORY
     action
   FILES
+    MoveTo.action
     Wander.action
+    BringGoods.action
 )
 
 generate_messages(
