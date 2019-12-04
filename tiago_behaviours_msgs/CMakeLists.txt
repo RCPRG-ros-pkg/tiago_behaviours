@@ -16,6 +16,7 @@ add_action_files(
     MoveTo.action
     Wander.action
     BringGoods.action
+    Stop.action
 )
 
 generate_messages(

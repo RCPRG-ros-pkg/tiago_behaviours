@@ -76,13 +76,13 @@ class BringGoods(smach.StateMachine):
             smach.StateMachine.add('SetNavParams', navigation.SetNavParams(), transitions={'ok':'MoveToKitchen', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(), transitions={'ok':'AskForGoods', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(), transitions={'FINISHED':'AskForGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
                                     remapping={'nav_goal_pose':'kitchen_pose'})
 
             smach.StateMachine.add('AskForGoods', SayAskForGoods(), transitions={'ok':'MoveBack', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                     remapping={'goods_name':'goods_name'})
 
-            smach.StateMachine.add('MoveBack', navigation.MoveToComplex(), transitions={'ok':'SayGiveGoods', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach.StateMachine.add('MoveBack', navigation.MoveToComplex(), transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
                                     remapping={'nav_goal_pose':'initial_pose'})
 
             smach.StateMachine.add('SayGiveGoods', SayTakeGoods(), transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},

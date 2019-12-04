@@ -28,7 +28,9 @@ class SetNavParams(smach.State):
         base_local_planner = rospy.get_param('/move_base/base_local_planner')
         self.local_planner_name = base_local_planner.split('/')[-1]
 
-        self.dynparam_client = dynamic_reconfigure.client.Client('move_base/' + self.local_planner_name)
+        print 'SetNavParams: detected local planner: ' + self.local_planner_name
+
+        self.dynparam_client = dynamic_reconfigure.client.Client('/move_base/' + self.local_planner_name)
 
         smach.State.__init__(self, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
                              outcomes=['ok', 'preemption', 'error'])
@@ -134,6 +136,11 @@ class MoveTo(smach.State):
                 client.cancel_all_goals()
                 return 'stall'
 
+            if self.preempt_requested():
+                client.cancel_all_goals()
+                self.service_preempt()
+                return 'preemption'
+
             rospy.sleep(0.1)
 
         # Manage state of the move_base action server
@@ -212,13 +219,13 @@ class ClearCostMaps(smach.State):
 
 class MoveToComplex(smach.StateMachine):
     def __init__(self):
-        smach.StateMachine.__init__(self, outcomes=['ok', 'preemption', 'error'],
+        smach.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED'],
                                             input_keys=['nav_goal_pose'])
 
         with self:
-            smach.StateMachine.add('MoveTo', MoveTo(), transitions={'ok':'ok', 'preemption':'preemption', 'error': 'error', 'stall':'ClearCostMaps'},
-                                        remapping={'nav_goal_pose':'nav_goal_pose'})
-            smach.StateMachine.add('ClearCostMaps', ClearCostMaps(), transitions={'ok':'MoveTo', 'preemption':'preemption', 'error': 'error'})
-            #smach.StateMachine.add('Rotate120deg_a', Rotate120deg(), transitions={'ok':'Rotate120deg_b', 'preemption':'preemption', 'error': 'error'})
-            #smach.StateMachine.add('Rotate120deg_b', Rotate120deg(), transitions={'ok':'Rotate120deg_c', 'preemption':'preemption', 'error': 'error'})
-            #smach.StateMachine.add('Rotate120deg_c', Rotate120deg(), transitions={'ok':'ok', 'preemption':'preemption', 'error': 'error'})
+            smach.StateMachine.add('MoveTo', MoveTo(),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps'},
+                                    remapping={'nav_goal_pose':'nav_goal_pose'})
+
+            smach.StateMachine.add('ClearCostMaps', ClearCostMaps(),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})

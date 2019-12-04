@@ -1,0 +1,316 @@
+#!/usr/bin/env python
+
+import time
+import threading
+import rospy
+import smach
+import smach_ros
+
+from tiago_behaviours_msgs.msg import WanderAction, MoveToAction, BringGoodsAction, StopAction
+import tiago_smach.bring_goods
+import tiago_smach.navigation
+import tiago_smach.wander
+
+class Idle(smach.State):
+    def __init__(self, action_names):
+        outcomes = ['ok', 'preemption', 'error']
+        for an in action_names:
+            if an in outcomes:
+                raise Exception('The action name "' + an + '" is already in outcomes.')
+            outcomes.append( an )
+        self.__pending_action__ = None
+
+        smach.State.__init__(self, output_keys=['sm_goal'],
+                                    outcomes=outcomes)
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print 'Idle.execute'
+
+        while True:
+            #print 'Idle.loop'
+            if self.preempt_requested():
+                # This state cannot be preempted
+                self.service_preempt()
+                return 'error'
+
+            if self.hasPendingAction():
+                action_name, sm_goal = self.takePendingAction()
+                userdata.sm_goal = sm_goal
+                print 'Idle: hasPendingAction: ' + action_name
+                return action_name
+            time.sleep(0.1)
+        return 'error'
+
+    def setPendingAction(self, action_name, sm_goal):
+        self.__pending_action__ = ( action_name, sm_goal )
+
+    def hasPendingAction(self):
+        return not self.__pending_action__ is None
+
+    def takePendingAction(self):
+        pending_action = self.__pending_action__
+        self.__pending_action__ = None
+        return pending_action
+
+class DoSomething(smach.State):
+    def __init__(self, state_name, input_keys, exec_time_s):
+        self.__exec_time_s__ = float(exec_time_s)
+        self.state_name = state_name
+        self.__result_outcome__ = 'FINISHED'
+        self.__outcomes__ = ['FINISHED', 'PREEMPTED', 'FAILED']
+
+        smach.State.__init__(self, input_keys=input_keys,
+                                    outcomes=self.__outcomes__)
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print self.state_name + '.execute'
+
+        iterations = int(self.__exec_time_s__*10.0)
+        for i in range(iterations):
+            if self.preempt_requested():
+                print self.state_name + ': preempt_requested'
+                self.service_preempt()
+                return 'PREEMPTED'
+            time.sleep(0.1)
+        return self.__result_outcome__
+
+    def setResultOutcome(self, result_outcome):
+        assert result_outcome in self.__outcomes__
+        self.__result_outcome__ = result_outcome
+
+    def setExecTime(self, exec_time_s):
+        self.__exec_time_s__ = exec_time_s
+
+#
+# The top-most SM that govenrs the highest-level behaviour.
+#
+
+class MainSM(smach.StateMachine):
+    def __init__(self, simulated_only):
+        smach.StateMachine.__init__(self, input_keys=['sm_goal'],
+                                        outcomes=['PREEMPTED',
+                                                    'FAILED',
+                                                    'FINISHED'])
+
+        if simulated_only == True:
+            state_dict = {
+                'BringGoods': DoSomething('BringGoods', ['goods_name'], 10.0),
+                'MoveTo': DoSomething('MoveTo', ['nav_goal_pose'], 10.0),
+                'Wander': DoSomething('Wander', [ ], 10.0),
+                }
+        elif simulated_only == False:
+            state_dict = {
+                'BringGoods': tiago_smach.bring_goods.BringGoods(),
+                'MoveTo': tiago_smach.navigation.MoveToComplex(),
+                'Wander': tiago_smach.wander.Wander(),
+                }
+        else:
+            raise Exception('Wrong value of arg: "simulated_only": ' + str(simulated_only))
+
+        with self:
+            smach.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander']),
+                                    transitions={
+                                        'ok':'FINISHED',
+                                        'preemption':'PREEMPTED',
+                                        'error': 'FAILED',
+                                        'bring_goods':'BringGoods',
+                                        'move_to':'MoveTo',
+                                        'wander':'Wander'},
+                                    remapping={ })
+
+            smach.StateMachine.add('BringGoods', state_dict['BringGoods'],
+                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle'},
+                                    remapping={'goods_name':'sm_goal'})
+
+            smach.StateMachine.add('MoveTo', state_dict['MoveTo'],
+                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle'},
+                                    remapping={'nav_goal_pose':'sm_goal'})
+
+            smach.StateMachine.add('Wander', state_dict['Wander'],
+                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle'},
+                                    remapping={ })
+
+    def updateAction(self, action_name, sm_goal):
+        print 'MainSM.updateAction( "' + action_name + '", "' + str(sm_goal) + '"" )'
+        if action_name == 'stop':
+            print 'active states: ', self.get_active_states()
+            if 'Idle' in self.get_active_states():
+                print 'Requested "stop", but the current state is "Idle". Nothing to stop'
+            else:
+                # Preempt the active states
+                for state_name in self.get_active_states():
+                    # TODO: some concurrent states are not preemptable (e.g. Conversation)
+                    st = self.get_children()[state_name]
+                    print 'requesting preempt for state ' + state_name
+                    st.request_preempt()
+        else:
+            if 'Idle' in self.get_active_states():
+                self.get_children()['Idle'].setPendingAction( action_name, sm_goal )
+            else:
+                print 'Could not switch to another state when not Idle'
+
+def test_MainSM():
+    # Test the main state machine, without ROS actionlib and with simulated states
+    sm = MainSM(True)
+
+    def thread_function(aa):
+        sm.execute()
+
+    thr = threading.Thread(target=thread_function, args=(1,))
+    thr.start()
+    time.sleep(0.5)
+
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.updateAction('stop', '')
+    time.sleep(0.5)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.updateAction('bring_goods', 'woda')
+    time.sleep(0.5)
+    assert set(sm.get_active_states()) == set(['BringGoods'])
+
+    sm.updateAction('bring_goods', 'woda')
+    time.sleep(0.5)
+    assert set(sm.get_active_states()) == set(['BringGoods'])
+
+    sm.updateAction('stop', '')
+    time.sleep(0.5)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.get_children()['BringGoods'].setExecTime(2.0)
+    sm.get_children()['BringGoods'].setResultOutcome('FAILED')
+    sm.updateAction('bring_goods', 'woda')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['BringGoods'])
+    time.sleep(2.0)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.get_children()['BringGoods'].setExecTime(2.0)
+    sm.get_children()['BringGoods'].setResultOutcome('FINISHED')
+    sm.updateAction('bring_goods', 'woda')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['BringGoods'])
+    time.sleep(2.0)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.get_children()['BringGoods'].setExecTime(30.0)
+    sm.updateAction('bring_goods', 'woda')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['BringGoods'])
+
+    sm.updateAction('move_to', 'asd')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['BringGoods'])
+
+    sm.updateAction('stop', '')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.updateAction('move_to', 'asd')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['MoveTo'])
+
+    sm.updateAction('stop', '')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.updateAction('wander', '')
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['Wander'])
+
+    sm.request_preempt()
+    time.sleep(1.0)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.request_preempt()
+    thr.join()
+
+    print 'test_MainSM: OK'
+
+#
+#
+#
+
+rospy.init_node('behaviours_server')
+rospy.sleep(1.0)
+
+main_sm = MainSM(False)
+
+def updateMainSM(action_name, sm_goal):
+    global main_sm
+    main_sm.updateAction(action_name, sm_goal)
+
+class ASUniversalState(smach.State):
+    def __init__(self):
+        smach.State.__init__(self, input_keys=['action_name', 'sm_goal'],
+                             outcomes=['ok', 'preemption', 'error'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        #print 'ASUniversalState.execute ' + userdata.action_name
+        #print userdata.sm_goal
+        updateMainSM(userdata.action_name, userdata.sm_goal)
+        return 'ok'
+
+class ASUniversal(smach.StateMachine):
+    def __init__(self):
+        smach.StateMachine.__init__(self, input_keys=['sm_goal'],
+                                         outcomes=['PREEMPTED',
+                                                    'FAILED',
+                                                    'FINISHED'])
+        with self:
+            smach.StateMachine.add('State', ASUniversalState(), transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+                                        remapping={'action_name':'action_name', 'sm_goal':'sm_goal'})
+
+def main():
+    print 'a'
+    behaviours = [
+        ('wander', WanderAction),
+        ('move_to', MoveToAction),
+        ('bring_goods', BringGoodsAction),
+        ('stop', StopAction),
+    ]
+
+    list_asw = []
+    list_sis = []
+    for sm_name, action_class in behaviours:
+        print 'b ' + sm_name
+
+        # Construct state machine
+        sm = ASUniversal()
+        sm.userdata.action_name = sm_name
+
+        # # Smach viewer
+        sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
+        sis.start()
+        list_sis.append( sis )
+
+        # Construct action server wrapper
+        asw = smach_ros.ActionServerWrapper(
+            server_name=sm_name,
+            action_spec=action_class,
+            wrapped_container=sm,
+            succeeded_outcomes=['FINISHED'],
+            aborted_outcomes=['FAILED'],
+            preempted_outcomes=['PREEMPTED'],
+            goal_key='sm_goal')
+
+        # Run the server in a background thread
+        asw.run_server()
+        list_asw.append( asw )
+    print 'c'
+
+    main_sm.execute()
+    print 'd'
+
+    #rospy.spin()
+
+    for sis in list_sis:
+        sis.stop()
+
+if __name__ == '__main__':
+    #test_MainSM()
+    main()

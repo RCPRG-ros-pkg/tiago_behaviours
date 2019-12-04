@@ -22,7 +22,7 @@ def main():
         server_name='wander',
         action_spec=WanderAction,
         wrapped_container=sm,
-        succeeded_outcomes=['APPROACHED'],
+        succeeded_outcomes=['FINISHED'],
         aborted_outcomes=['FAILED'],
         preempted_outcomes=['PREEMPTED'],
         goal_key='sm_goal')

@@ -22,9 +22,9 @@ def main():
         server_name='move_to',
         action_spec=MoveToAction,
         wrapped_container=sm,
-        succeeded_outcomes=['ok'],
-        aborted_outcomes=['error'],
-        preempted_outcomes=['preemption'],
+        succeeded_outcomes=['FINISHED'],
+        aborted_outcomes=['FAILED'],
+        preempted_outcomes=['PREEMPTED'],
         goal_key='nav_goal_pose')
         # feedback_key='sm_feedback',
         # result_key='sm_result')

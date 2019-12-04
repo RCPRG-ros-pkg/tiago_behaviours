@@ -10,10 +10,6 @@ import actionlib
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceAction
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionGoal
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
 from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
 from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
@@ -57,14 +53,6 @@ class PickPose(smach.State):
 
         return 'ok'
 
-#class Finalize(smach.State):
-#    def __init__(self):
-#        smach.State.__init__(self,
-#                             outcomes=['ok'])
-#
-#    def execute(self, userdata):
-#        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-
 class Wander(smach.StateMachine):
     def __init__(self):
         smach.StateMachine.__init__(self, outcomes=['PREEMPTED',
@@ -74,10 +62,13 @@ class Wander(smach.StateMachine):
         self.userdata.max_lin_accel = 0.5
 
         with self:
-            smach.StateMachine.add('SetNavParams', navigation.SetNavParams(), transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach.StateMachine.add('SetNavParams', navigation.SetNavParams(),
+                                        transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                         remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
-            smach.StateMachine.add('PickPose', PickPose(), transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
-            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(), transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'}, remapping={'nav_goal_pose':'pose'})
-            #smach.StateMachine.add('Finalize', Finalize(), transitions={'preemption': 'PREEMPTED',
-            #                                                'error': 'FAILED',
-            #                                                'ok': 'APPROACHED'})
+
+            smach.StateMachine.add('PickPose', PickPose(),
+                                        transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
+
+            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(),
+                                        transitions={'FINISHED':'PickPose', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
+                                        remapping={'nav_goal_pose':'pose'})
