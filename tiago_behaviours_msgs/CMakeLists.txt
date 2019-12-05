@@ -17,6 +17,8 @@ add_action_files(
     Wander.action
     BringGoods.action
     Stop.action
+    QuestionLoad.action
+    QuestionCurrentTask.action
 )
 
 generate_messages(

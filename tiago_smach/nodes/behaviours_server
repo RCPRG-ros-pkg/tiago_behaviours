@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 
+import sys
 import time
 import threading
 import rospy
 import smach
 import smach_ros
 
-from tiago_behaviours_msgs.msg import WanderAction, MoveToAction, BringGoodsAction, StopAction
+from tiago_behaviours_msgs.msg import WanderAction, MoveToAction, BringGoodsAction, StopAction,\
+                                        QuestionLoadAction, QuestionCurrentTaskAction
+
 import tiago_smach.bring_goods
 import tiago_smach.navigation
 import tiago_smach.wander
@@ -153,7 +156,14 @@ class MainSM(smach.StateMachine):
 
 def test_MainSM():
     # Test the main state machine, without ROS actionlib and with simulated states
+
+    rospy.init_node('behaviours_server_test')
+    rospy.sleep(1.0)
+
     sm = MainSM(True)
+
+    sis = smach_ros.IntrospectionServer('main_server', sm, '/SM_MAIN_SERVER')
+    sis.start()
 
     def thread_function(aa):
         sm.execute()
@@ -165,7 +175,15 @@ def test_MainSM():
     assert set(sm.get_active_states()) == set(['Idle'])
 
     sm.updateAction('stop', '')
-    time.sleep(0.5)
+    time.sleep(0.4)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.updateAction('q_load', '')
+    time.sleep(0.1)
+    assert set(sm.get_active_states()) == set(['Idle'])
+
+    sm.updateAction('q_current_task', '')
+    time.sleep(0.1)
     assert set(sm.get_active_states()) == set(['Idle'])
 
     sm.updateAction('bring_goods', 'woda')
@@ -228,59 +246,57 @@ def test_MainSM():
     sm.request_preempt()
     thr.join()
 
+    raw_input('.')
+
+    sis.stop()
     print 'test_MainSM: OK'
 
 #
 #
 #
 
-rospy.init_node('behaviours_server')
-rospy.sleep(1.0)
-
-main_sm = MainSM(False)
-
-def updateMainSM(action_name, sm_goal):
-    global main_sm
-    main_sm.updateAction(action_name, sm_goal)
-
 class ASUniversalState(smach.State):
-    def __init__(self):
+    def __init__(self, main_sm):
+        self.main_sm = main_sm
+
         smach.State.__init__(self, input_keys=['action_name', 'sm_goal'],
                              outcomes=['ok', 'preemption', 'error'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        #print 'ASUniversalState.execute ' + userdata.action_name
-        #print userdata.sm_goal
-        updateMainSM(userdata.action_name, userdata.sm_goal)
+        self.main_sm.updateAction(action_name, sm_goal)
         return 'ok'
 
 class ASUniversal(smach.StateMachine):
-    def __init__(self):
+    def __init__(self, main_sm):
         smach.StateMachine.__init__(self, input_keys=['sm_goal'],
                                          outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'])
         with self:
-            smach.StateMachine.add('State', ASUniversalState(), transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach.StateMachine.add('State', ASUniversalState(main_sm), transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                         remapping={'action_name':'action_name', 'sm_goal':'sm_goal'})
 
 def main():
-    print 'a'
+    rospy.init_node('behaviours_server')
+    rospy.sleep(1.0)
+
+    main_sm = MainSM(False)
+
     behaviours = [
         ('wander', WanderAction),
         ('move_to', MoveToAction),
         ('bring_goods', BringGoodsAction),
         ('stop', StopAction),
+        ('q_load', QuestionLoadAction),
+        ('q_current_task', QuestionCurrentTaskAction),
     ]
 
     list_asw = []
     list_sis = []
     for sm_name, action_class in behaviours:
-        print 'b ' + sm_name
-
         # Construct state machine
-        sm = ASUniversal()
+        sm = ASUniversal(main_sm)
         sm.userdata.action_name = sm_name
 
         # # Smach viewer
@@ -301,16 +317,14 @@ def main():
         # Run the server in a background thread
         asw.run_server()
         list_asw.append( asw )
-    print 'c'
 
     main_sm.execute()
-    print 'd'
-
-    #rospy.spin()
 
     for sis in list_sis:
         sis.stop()
 
 if __name__ == '__main__':
-    #test_MainSM()
-    main()
+    if len(sys.argv) == 2 and sys.argv[1] == 'test':
+        test_MainSM()
+    else:
+        main()
