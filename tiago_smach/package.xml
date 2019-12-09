@@ -25,4 +25,7 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf</depend>
+  <build_depend>pl_nouns</build_depend>
+  <exec_depend>pl_nouns</exec_depend>
+ 
 </package>

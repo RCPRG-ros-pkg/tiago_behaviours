@@ -29,7 +29,7 @@ def makePose(x, y, theta):
     return result
 
 class PickPose(smach.State):
-    def __init__(self):
+    def __init__(self, is_simulated):
         smach.State.__init__(self, output_keys=['pose'],
                              outcomes=['ok', 'preemption', 'error'])
 
@@ -54,7 +54,7 @@ class PickPose(smach.State):
         return 'ok'
 
 class Wander(smach.StateMachine):
-    def __init__(self):
+    def __init__(self, is_simulated):
         smach.StateMachine.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'])
@@ -62,13 +62,13 @@ class Wander(smach.StateMachine):
         self.userdata.max_lin_accel = 0.5
 
         with self:
-            smach.StateMachine.add('SetNavParams', navigation.SetNavParams(),
+            smach.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),
                                         transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                         remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach.StateMachine.add('PickPose', PickPose(),
+            smach.StateMachine.add('PickPose', PickPose(is_simulated),
                                         transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
 
-            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(),
+            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(is_simulated),
                                         transitions={'FINISHED':'PickPose', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
                                         remapping={'nav_goal_pose':'pose'})

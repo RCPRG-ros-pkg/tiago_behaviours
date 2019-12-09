@@ -19,6 +19,9 @@ add_action_files(
     Stop.action
     QuestionLoad.action
     QuestionCurrentTask.action
+    Ack.action
+    AckItook.action
+    AckIgave.action
 )
 
 generate_messages(
@@ -29,8 +32,6 @@ generate_messages(
     std_msgs
 )
 
-catkin_package(
-
-)
+catkin_package()
 
 

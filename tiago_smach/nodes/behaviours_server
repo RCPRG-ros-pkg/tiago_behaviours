@@ -8,7 +8,7 @@ import smach
 import smach_ros
 
 from tiago_behaviours_msgs.msg import WanderAction, MoveToAction, BringGoodsAction, StopAction,\
-                                        QuestionLoadAction, QuestionCurrentTaskAction
+                                        QuestionLoadAction, QuestionCurrentTaskAction, AckAction, AckItookAction, AckIgaveAction
 
 import tiago_smach.bring_goods
 import tiago_smach.navigation
@@ -56,9 +56,12 @@ class Idle(smach.State):
         self.__pending_action__ = None
         return pending_action
 
-class DoSomething(smach.State):
+class SimPerformTask(smach.State):
     def __init__(self, state_name, input_keys, exec_time_s):
-        self.__exec_time_s__ = float(exec_time_s)
+        if exec_time_s is None:
+            self.__exec_time_s__ = -1.0
+        else:
+            self.__exec_time_s__ = float(exec_time_s)
         self.state_name = state_name
         self.__result_outcome__ = 'FINISHED'
         self.__outcomes__ = ['FINISHED', 'PREEMPTED', 'FAILED']
@@ -70,13 +73,21 @@ class DoSomething(smach.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print self.state_name + '.execute'
 
-        iterations = int(self.__exec_time_s__*10.0)
-        for i in range(iterations):
-            if self.preempt_requested():
-                print self.state_name + ': preempt_requested'
-                self.service_preempt()
-                return 'PREEMPTED'
-            time.sleep(0.1)
+        if self.__exec_time_s__ > 0:
+            iterations = int(self.__exec_time_s__*10.0)
+            for i in range(iterations):
+                if self.preempt_requested():
+                    print self.state_name + ': preempt_requested'
+                    self.service_preempt()
+                    return 'PREEMPTED'
+                time.sleep(0.1)
+        else:
+            while True:
+                if self.preempt_requested():
+                    print self.state_name + ': preempt_requested'
+                    self.service_preempt()
+                    return 'PREEMPTED'
+                time.sleep(0.1)
         return self.__result_outcome__
 
     def setResultOutcome(self, result_outcome):
@@ -87,31 +98,37 @@ class DoSomething(smach.State):
         self.__exec_time_s__ = exec_time_s
 
 #
-# The top-most SM that govenrs the highest-level behaviour.
+# 
 #
 
-class MainSM(smach.StateMachine):
-    def __init__(self, simulated_only):
+class BehaviourSM(smach.StateMachine):
+    def __init__(self, is_simulated, conversation_interface):
         smach.StateMachine.__init__(self, input_keys=['sm_goal'],
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'])
 
-        if simulated_only == True:
+        state_dict = {
+            'BringGoods': tiago_smach.bring_goods.BringGoods(is_simulated, conversation_interface),
+            'MoveTo': tiago_smach.navigation.MoveToComplex(is_simulated),
+            'Wander': tiago_smach.wander.Wander(is_simulated),
+            }
+        '''
+        if is_simulated == True:
             state_dict = {
-                'BringGoods': DoSomething('BringGoods', ['goods_name'], 10.0),
-                'MoveTo': DoSomething('MoveTo', ['nav_goal_pose'], 10.0),
-                'Wander': DoSomething('Wander', [ ], 10.0),
+                'BringGoods': SimPerformTask('BringGoods', ['goods_name'], 10.0),
+                'MoveTo': SimPerformTask('MoveTo', ['nav_goal_pose'], 10.0),
+                'Wander': SimPerformTask('Wander', [ ], None),
                 }
-        elif simulated_only == False:
+        elif is_simulated == False:
             state_dict = {
-                'BringGoods': tiago_smach.bring_goods.BringGoods(),
-                'MoveTo': tiago_smach.navigation.MoveToComplex(),
-                'Wander': tiago_smach.wander.Wander(),
+                'BringGoods': tiago_smach.bring_goods.BringGoods(is_simulated),
+                'MoveTo': tiago_smach.navigation.MoveToComplex(is_simulated),
+                'Wander': tiago_smach.wander.Wander(is_simulated),
                 }
         else:
-            raise Exception('Wrong value of arg: "simulated_only": ' + str(simulated_only))
-
+            raise Exception('Wrong value of arg: "is_simulated": ' + str(is_simulated))
+        '''
         with self:
             smach.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander']),
                                     transitions={
@@ -136,6 +153,117 @@ class MainSM(smach.StateMachine):
                                     remapping={ })
 
     def updateAction(self, action_name, sm_goal):
+        print 'BehaviourSM.updateAction( "' + action_name + '", "' + str(sm_goal) + '"" )'
+        if action_name == 'stop':
+            print 'active states: ', self.get_active_states()
+            if 'Idle' in self.get_active_states():
+                print 'Requested "stop", but the current state is "Idle". Nothing to stop'
+            else:
+                # Preempt the active states
+                for state_name in self.get_active_states():
+                    # TODO: some concurrent states are not preemptable (e.g. Conversation)
+                    st = self.get_children()[state_name]
+                    print 'requesting preempt for state ' + state_name
+                    st.request_preempt()
+        else:
+            if 'Idle' in self.get_active_states():
+                self.get_children()['Idle'].setPendingAction( action_name, sm_goal )
+            else:
+                print 'Could not switch to another state when not Idle'
+
+#
+# The top-most SM that govenrs the highest-level behaviour.
+#
+'''
+class TestState(smach.State):
+    def __init__(self, state_name, exec_time):
+        self.state_name = state_name
+        self.exec_time = exec_time
+        smach.State.__init__(self, output_keys=['sm_goal'],
+                                    outcomes=['ok', 'preemption', 'error'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print self.state_name + '.execute'
+        rospy.sleep(self.exec_time)
+        return 'ok'
+
+class Test1SM(smach.StateMachine):
+    def __init__(self):
+        smach.StateMachine.__init__(self, input_keys=['sm_goal'],
+                                        outcomes=['PREEMPTED',
+                                                    'FAILED',
+                                                    'FINISHED'])
+
+        with self:
+            smach.StateMachine.add('s1', TestState('Test1_s1', 2.0),
+                                    transitions={
+                                        'ok':'s2',
+                                        'preemption':'PREEMPTED',
+                                        'error': 'FAILED'},
+                                    remapping={ })
+
+            smach.StateMachine.add('s2', TestState('Test1_s2', 2.0),
+                                    transitions={
+                                        'ok':'s1',
+                                        'preemption':'PREEMPTED',
+                                        'error': 'FAILED'},
+                                    remapping={ })
+'''
+
+class HearState(smach.State):
+    def __init__(self, conversation_interface):
+        smach.State.__init__(self, output_keys=[],
+                                    outcomes=['ok', 'preemption', 'error'])
+        self.conversation_interface = conversation_interface
+        self.__items__ = set()
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        while True:
+            if self.preempt_requested():
+                self.service_preempt()
+                return 'preemption'
+
+            unknown_items = set()
+            for item in self.__items__:
+                if self.conversation_interface.hasRequest( item ):
+                    self.conversation_interface.add( item )
+                    self.conversation_interface.removeRequest( item )
+                else:
+                    unknown_items.add( item )
+            # TODO: react to unknown items
+            self.__items__ = set()
+            rospy.sleep(0.1)
+
+        return 'ok'
+
+    def add(self, item):
+        self.__items__.add( item )
+
+class ConversationSM(smach.StateMachine):
+    def __init__(self, conversation_interface):
+        smach.StateMachine.__init__(self, input_keys=['sm_goal'],
+                                        outcomes=['PREEMPTED',
+                                                    'FAILED',
+                                                    'FINISHED'])
+
+        with self:
+            smach.StateMachine.add('hear', HearState(conversation_interface),
+                                    transitions={
+                                        'ok':'hear',
+                                        'preemption':'PREEMPTED',
+                                        'error': 'FAILED'},
+                                    remapping={ })
+
+    def updateAction(self, action_name, sm_goal):
+        print 'ConversationSM.updateAction ' + action_name
+        self.get_children()['hear'].add( action_name )
+
+        #if conversation_interface.hasRequest()
+        #conversation_interface.add
+        return
         print 'MainSM.updateAction( "' + action_name + '", "' + str(sm_goal) + '"" )'
         if action_name == 'stop':
             print 'active states: ', self.get_active_states()
@@ -154,13 +282,84 @@ class MainSM(smach.StateMachine):
             else:
                 print 'Could not switch to another state when not Idle'
 
-def test_MainSM():
+class ConversationInterface:
+    def __init__(self):
+        self.__requests__ = set()
+        self.__items__ = set()
+
+    def addRequest( self, req ):
+        assert not req in self.__requests__
+        self.__requests__.add( req )
+
+    def hasRequest( self, req ):
+        return req in self.__requests__
+
+    def removeRequest( self, req ):
+        assert req in self.__requests__
+        self.__requests__.remove( req )
+
+    def has( self, it ):
+        return it in self.__items__
+
+    def remove( self, it ):
+        assert it in self.__items__
+        self.__items__.remove( it )
+
+    def add( self, it ):
+        assert not it in self.__items__
+        self.__items__.add( it )
+
+class MainSM(smach.Concurrence):
+    def __init__(self):
+        smach.Concurrence.__init__(self, outcomes=['PREEMPTED',
+                                                    'FAILED',
+                                                    'FINISHED'],
+                                        default_outcome='FINISHED',
+                                        outcome_map={'FINISHED':
+                                            { 'task':'FINISHED',
+                                                'conv':'FINISHED'}})
+
+        conversation_interface = ConversationInterface()
+
+        self.behaviour_sm = BehaviourSM( True, conversation_interface )
+        self.conversation_sm = ConversationSM( conversation_interface )
+
+        with self:
+            # Add states to the container
+            smach.Concurrence.add('task', self.behaviour_sm)
+            smach.Concurrence.add('conv', self.conversation_sm)
+
+def test_concurrenceSM():
+    rospy.init_node('behaviours_server_test')
+    rospy.sleep(1.0)
+
+    sm = MainSM()
+
+    sis = smach_ros.IntrospectionServer('main_server', sm, '/SM_MAIN_SERVER')
+    sis.start()
+
+    def thread_function(aa):
+        sm.execute()
+
+    thr = threading.Thread(target=thread_function, args=(1,))
+    thr.start()
+    time.sleep(0.5)
+
+    raw_input('Press [ENTER] to stop.')
+
+    sm.request_preempt()
+    thr.join()
+
+    sis.stop()
+    print 'test_concurrenceSM: OK'
+
+def test_BehaviourSM():
     # Test the main state machine, without ROS actionlib and with simulated states
 
     rospy.init_node('behaviours_server_test')
     rospy.sleep(1.0)
 
-    sm = MainSM(True)
+    sm = BehaviourSM(True)
 
     sis = smach_ros.IntrospectionServer('main_server', sm, '/SM_MAIN_SERVER')
     sis.start()
@@ -178,13 +377,13 @@ def test_MainSM():
     time.sleep(0.4)
     assert set(sm.get_active_states()) == set(['Idle'])
 
-    sm.updateAction('q_load', '')
-    time.sleep(0.1)
-    assert set(sm.get_active_states()) == set(['Idle'])
+#    sm.updateAction('q_load', '')
+#    time.sleep(0.1)
+#    assert set(sm.get_active_states()) == set(['Idle'])
 
-    sm.updateAction('q_current_task', '')
-    time.sleep(0.1)
-    assert set(sm.get_active_states()) == set(['Idle'])
+#    sm.updateAction('q_current_task', '')
+#    time.sleep(0.1)
+#    assert set(sm.get_active_states()) == set(['Idle'])
 
     sm.updateAction('bring_goods', 'woda')
     time.sleep(0.5)
@@ -249,7 +448,7 @@ def test_MainSM():
     raw_input('.')
 
     sis.stop()
-    print 'test_MainSM: OK'
+    print 'test_BehaviourSM: OK'
 
 #
 #
@@ -264,15 +463,16 @@ class ASUniversalState(smach.State):
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        self.main_sm.updateAction(action_name, sm_goal)
+        self.main_sm.updateAction(userdata.action_name, userdata.sm_goal)
         return 'ok'
 
 class ASUniversal(smach.StateMachine):
-    def __init__(self, main_sm):
+    def __init__(self, main_sm, action_name):
         smach.StateMachine.__init__(self, input_keys=['sm_goal'],
                                          outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'])
+        self.userdata.action_name = action_name
         with self:
             smach.StateMachine.add('State', ASUniversalState(main_sm), transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                         remapping={'action_name':'action_name', 'sm_goal':'sm_goal'})
@@ -281,23 +481,29 @@ def main():
     rospy.init_node('behaviours_server')
     rospy.sleep(1.0)
 
-    main_sm = MainSM(False)
+    main_sm = MainSM()
+
+    list_sis = []
+    sis = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
+    sis.start()
+    list_sis.append( sis )
 
     behaviours = [
-        ('wander', WanderAction),
-        ('move_to', MoveToAction),
-        ('bring_goods', BringGoodsAction),
-        ('stop', StopAction),
-        ('q_load', QuestionLoadAction),
-        ('q_current_task', QuestionCurrentTaskAction),
+        ('wander', WanderAction, main_sm.behaviour_sm),
+        ('move_to', MoveToAction, main_sm.behaviour_sm),
+        ('bring_goods', BringGoodsAction, main_sm.behaviour_sm),
+        ('stop', StopAction, main_sm.behaviour_sm),
+        ('q_load', QuestionLoadAction, main_sm.conversation_sm),
+        ('q_current_task', QuestionCurrentTaskAction, main_sm.conversation_sm),
+        ('ack', AckAction, main_sm.conversation_sm),
+        ('ack_i_took', AckItookAction, main_sm.conversation_sm),
+        ('ack_i_gave', AckIgaveAction, main_sm.conversation_sm),
     ]
 
     list_asw = []
-    list_sis = []
-    for sm_name, action_class in behaviours:
+    for sm_name, action_class, dest_sm in behaviours:
         # Construct state machine
-        sm = ASUniversal(main_sm)
-        sm.userdata.action_name = sm_name
+        sm = ASUniversal(dest_sm, sm_name)
 
         # # Smach viewer
         sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
@@ -324,7 +530,9 @@ def main():
         sis.stop()
 
 if __name__ == '__main__':
+    #test_concurrenceSM()
+    #exit(0)
     if len(sys.argv) == 2 and sys.argv[1] == 'test':
-        test_MainSM()
+        test_BehaviourSM()
     else:
         main()
