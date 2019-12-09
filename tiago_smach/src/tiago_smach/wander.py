@@ -54,7 +54,7 @@ class PickPose(smach.State):
         return 'ok'
 
 class Wander(smach.StateMachine):
-    def __init__(self, is_simulated):
+    def __init__(self, is_simulated, conversation_interface):
         smach.StateMachine.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'])
@@ -69,6 +69,6 @@ class Wander(smach.StateMachine):
             smach.StateMachine.add('PickPose', PickPose(is_simulated),
                                         transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
 
-            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(is_simulated),
+            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(is_simulated, conversation_interface),
                                         transitions={'FINISHED':'PickPose', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
                                         remapping={'nav_goal_pose':'pose'})

@@ -18,7 +18,6 @@ from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, T
 from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
-from std_msgs.msg import String
 
 import navigation
 
@@ -48,15 +47,15 @@ class SayAskForGoods(smach.State):
                              outcomes=['ok', 'preemption', 'timeout', 'error'])
 
         self.conversation_interface = conversation_interface
-        self.rico_says_pub = rospy.Publisher('rico_says', String, queue_size=10)
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        self.rico_says_pub.publish( 'Podaj mi {"' + str(userdata.goods_name.goods_name) + '", biernik} i potwierdz' );
+        self.conversation_interface.addSpeakSentence( 'Podaj mi {"' + str(userdata.goods_name.goods_name) + '", biernik} i potwierdz' )
 
-        self.conversation_interface.addRequest('ack')
-        self.conversation_interface.addRequest('ack_i_gave')
+        self.conversation_interface.addExpected('ack', True)
+        self.conversation_interface.addExpected('ack_i_gave', True)
+        self.conversation_interface.addExpected('q_current_task', False)
 
         start_time = rospy.Time.now()
         while True:
@@ -65,21 +64,26 @@ class SayAskForGoods(smach.State):
             loop_time_s = loop_time.secs
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
-                self.conversation_interface.removeRequest('ack')
-                self.conversation_interface.removeRequest('ack_i_gave')
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_gave')
+                self.conversation_interface.removeExpected('q_current_task')
                 return 'timeout'
 
             if self.preempt_requested():
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_gave')
+                self.conversation_interface.removeExpected('q_current_task')
                 self.service_preempt()
-                self.conversation_interface.removeRequest('ack')
-                self.conversation_interface.removeRequest('ack_i_gave')
                 return 'preemption'
 
-            if self.conversation_interface.has('ack'):
-                self.conversation_interface.remove('ack')
-                return 'ok'
-            elif self.conversation_interface.has('ack_i_gave'):
-                self.conversation_interface.remove('ack_i_gave')
+            if self.conversation_interface.consumeItem('q_current_task'):
+                self.conversation_interface.addSpeakSentence( 'Czekam na polozenie {"' + str(userdata.goods_name.goods_name) + '", dopelniacz}' )
+
+            if self.conversation_interface.consumeItem('ack') or\
+                    self.conversation_interface.consumeItem('ack_i_gave'):
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_gave')
+                self.conversation_interface.removeExpected('q_current_task')
                 return 'ok'
 
             rospy.sleep(0.1)
@@ -92,15 +96,15 @@ class SayTakeGoods(smach.State):
                              outcomes=['ok', 'preemption', 'error'])
 
         self.conversation_interface = conversation_interface
-        self.rico_says_pub = rospy.Publisher('rico_says', String, queue_size=10)
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        self.rico_says_pub.publish( 'Odbierz {"' + str(userdata.goods_name.goods_name) + '", biernik} i potwierdz' );
+        self.conversation_interface.addSpeakSentence( 'Odbierz {"' + str(userdata.goods_name.goods_name) + '", biernik} i potwierdz' )
 
-        self.conversation_interface.addRequest('ack')
-        self.conversation_interface.addRequest('ack_i_took')
+        self.conversation_interface.addExpected('ack', True)
+        self.conversation_interface.addExpected('ack_i_took', True)
+        self.conversation_interface.addExpected('q_current_task', False)
 
         start_time = rospy.Time.now()
         while True:
@@ -109,21 +113,26 @@ class SayTakeGoods(smach.State):
             loop_time_s = loop_time.secs
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
-                self.conversation_interface.removeRequest('ack')
-                self.conversation_interface.removeRequest('ack_i_took')
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_took')
+                self.conversation_interface.removeExpected('q_current_task')
                 return 'timeout'
 
             if self.preempt_requested():
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_took')
+                self.conversation_interface.removeExpected('q_current_task')
                 self.service_preempt()
-                self.conversation_interface.removeRequest('ack')
-                self.conversation_interface.removeRequest('ack_i_took')
                 return 'preemption'
 
-            if self.conversation_interface.has('ack'):
-                self.conversation_interface.remove('ack')
-                return 'ok'
-            elif self.conversation_interface.has('ack_i_took'):
-                self.conversation_interface.remove('ack_i_took')
+            if self.conversation_interface.consumeItem('q_current_task'):
+                self.conversation_interface.addSpeakSentence( 'Czekam na odebranie {"' + str(userdata.goods_name.goods_name) + '", dopelniacz}' )
+
+            if self.conversation_interface.consumeItem('ack') or\
+                    self.conversation_interface.consumeItem('ack_i_took'):
+                self.conversation_interface.removeExpected('ack')
+                self.conversation_interface.removeExpected('ack_i_took')
+                self.conversation_interface.removeExpected('q_current_task')
                 return 'ok'
 
             rospy.sleep(0.1)
@@ -148,7 +157,7 @@ class BringGoods(smach.StateMachine):
                                     transitions={'ok':'MoveToKitchen', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(is_simulated),
+            smach.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(is_simulated, conversation_interface),
                                     transitions={'FINISHED':'AskForGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
                                     remapping={'nav_goal_pose':'kitchen_pose'})
 
@@ -156,7 +165,7 @@ class BringGoods(smach.StateMachine):
                                     transitions={'ok':'MoveBack', 'preemption':'PREEMPTED', 'error':'FAILED', 'timeout':'AskForGoods'},
                                     remapping={'goods_name':'goods_name'})
 
-            smach.StateMachine.add('MoveBack', navigation.MoveToComplex(is_simulated),
+            smach.StateMachine.add('MoveBack', navigation.MoveToComplex(is_simulated, conversation_interface),
                                     transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
                                     remapping={'nav_goal_pose':'initial_pose'})
 

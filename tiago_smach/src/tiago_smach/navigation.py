@@ -16,29 +16,45 @@ from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, T
 from pal_common_msgs.msg import *
 from geometry_msgs.msg import Pose
 import std_srvs.srv as std_srvs
-from std_msgs.msg import String
 
 NAVIGATION_MAX_TIME_S = 100
 
 class SayImGoingTo(smach.State):
-    def __init__(self, is_simulated):
+    def __init__(self, is_simulated, conversation_interface):
         smach.State.__init__(self, input_keys=['nav_goal_pose'],
                              outcomes=['ok', 'preemption', 'error'])
 
-        self.rico_says_pub = rospy.Publisher('rico_says', String, queue_size=10)
+        self.conversation_interface = conversation_interface
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        #self.rico_says_pub.publish( 'Jade do ["' + str(userdata.goods_name.goods_name) + '", dopelniacz]' );
         try:
             pose = userdata.nav_goal_pose.pose
         except:
             pose = userdata.nav_goal_pose
 
-            self.rico_says_pub.publish( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) );
+        self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+
         return 'ok'
 
+class SayIArrivedTo(smach.State):
+    def __init__(self, is_simulated, conversation_interface):
+        smach.State.__init__(self, input_keys=['nav_goal_pose'],
+                             outcomes=['ok', 'preemption', 'error'])
+
+        self.conversation_interface = conversation_interface
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        try:
+            pose = userdata.nav_goal_pose.pose
+        except:
+            pose = userdata.nav_goal_pose
+
+        self.conversation_interface.addSpeakSentence( 'Dojechalem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+        return 'ok'
 
 class SetNavParams(smach.State):
     def __init__(self, is_simulated):
@@ -104,12 +120,13 @@ class SetNavParams(smach.State):
         return 'ok'
 
 class MoveTo(smach.State):
-    def __init__(self, is_simulated):
+    def __init__(self, is_simulated, conversation_interface):
         self.current_pose = Pose()
         self.is_feedback_received = False
         self.move_base_status = GoalStatus.PENDING
         self.is_goal_achieved = False
         self.is_simulated = is_simulated
+        self.conversation_interface = conversation_interface
 
         smach.State.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall'],
@@ -118,20 +135,26 @@ class MoveTo(smach.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
+        self.conversation_interface.addExpected('q_current_task', False)
+
+        # robot movement here - using Tiago move_base
+        try:
+            pose = userdata.nav_goal_pose.pose
+        except:
+            pose = userdata.nav_goal_pose
+
         if self.is_simulated:
             for i in range(50):
                 if self.preempt_requested():
+                    self.conversation_interface.removeExpected('q_current_task')
                     self.service_preempt()
                     return 'preemption'
+
+                if self.conversation_interface.consumeItem('q_current_task'):
+                    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
                 rospy.sleep(0.1)
             return 'ok'
         else:
-            # robot movement here - using Tiago move_base
-            try:
-                pose = userdata.nav_goal_pose.pose
-            except:
-                pose = userdata.nav_goal_pose
-
             goal = MoveBaseGoal()
             goal.target_pose.pose = pose
             goal.target_pose.header.frame_id = 'map'
@@ -163,14 +186,19 @@ class MoveTo(smach.State):
 
                 if loop_time_s > NAVIGATION_MAX_TIME_S:
                     # break the loop, end with error state
+                    self.conversation_interface.removeExpected('q_current_task')
                     rospy.logwarn('State: Navigation took too much time, returning error')
                     client.cancel_all_goals()
                     return 'stall'
 
                 if self.preempt_requested():
+                    self.conversation_interface.removeExpected('q_current_task')
                     client.cancel_all_goals()
                     self.service_preempt()
                     return 'preemption'
+
+                if self.conversation_interface.consumeItem('q_current_task'):
+                    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
 
                 rospy.sleep(0.1)
 
@@ -253,18 +281,21 @@ class ClearCostMaps(smach.State):
         return 'ok'
 
 class MoveToComplex(smach.StateMachine):
-    def __init__(self, is_simulated):
+    def __init__(self, is_simulated, conversation_interface):
         smach.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED'],
                                             input_keys=['nav_goal_pose'])
 
         with self:
-            smach.StateMachine.add('SayImGoingTo', SayImGoingTo(is_simulated),
+            smach.StateMachine.add('SayImGoingTo', SayImGoingTo(is_simulated, conversation_interface),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                     remapping={'nav_goal_pose':'nav_goal_pose'})
 
-            smach.StateMachine.add('MoveTo', MoveTo(is_simulated),
-                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps'},
+            smach.StateMachine.add('MoveTo', MoveTo(is_simulated, conversation_interface),
+                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps'},
                                     remapping={'nav_goal_pose':'nav_goal_pose'})
 
             smach.StateMachine.add('ClearCostMaps', ClearCostMaps(is_simulated),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
+
+            smach.StateMachine.add('SayIArrivedTo', SayIArrivedTo(is_simulated, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'})
