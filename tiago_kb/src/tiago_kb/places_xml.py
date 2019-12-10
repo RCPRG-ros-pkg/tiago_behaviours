@@ -166,7 +166,7 @@ def drawPointPlace(img, pl, color):
     drawLine(img, pt, pt2, color, 1)
 
 class VolumetricPlace:
-    def __init__(self, pl_id, name, img, res, origin):
+    def __init__(self, pl_id, name, img, origin, res):
         self.__pl_id__  = pl_id
         self.__eimg__ = EmbeddedImage(img, origin, res)
         self.__name__  = name
@@ -185,7 +185,8 @@ class VolumetricPlace:
 
     def getTransformed(self, tf):
         eimg = self.__eimg__.getTransformed(tf)
-        return VolumetricPlace(self.__pl_id__, self.__name__, eimg.getImage(), eimg.getResolution(), eimg.getOrigin())
+        return VolumetricPlace(self.__pl_id__, self.__name__, eimg.getImage(),
+                                eimg.getOrigin(), eimg.getResolution())
 
 class PointPlace:
     def __init__(self, pl_id, name, pt, n):
@@ -227,6 +228,7 @@ class MapContext:
 
     def setVolumetricMask(self, img):
         if self.__volumetric_mask__ is None:
+            assert img.shape == self.__map__.getImage().shape
             self.__volumetric_mask__ = EmbeddedImage(img, self.__map__.getOrigin(),
                                         self.__map__.getResolution() )
         else:
@@ -256,12 +258,14 @@ class MapContext:
                 return pl
         return None
 
-    def addVolumetricPlace(self, pl_id, name, img, resolution, origin):
+    def addVolumetricPlace(self, pl_id, name, img):
         if not self.getPlaceById( pl_id ) is None:
             raise Exception('Two places with the same id: "' + pl_id + '"')
         if not self.getPlaceByName( name ) is None:
             raise Exception('Two places with the same name: "' + name + '"')
-        self.__volumetric_places__.append( VolumetricPlace(pl_id, name, img, resolution, origin) )
+        assert img.shape == self.__map__.getImage().shape
+        self.__volumetric_places__.append(
+                VolumetricPlace(pl_id, name, img, self.__map__.getOrigin(), self.__map__.getResolution()) )
 
     def addPointPlace(self, pl_id, name, position, front_vec):
         if not self.getPlaceById( pl_id ) is None:
@@ -276,20 +280,6 @@ class PlacesXml:
         with open(filename, "r") as f:
             xml_str = f.read()
         dom = minidom.parseString(xml_str)
-
-        '''
-        print "COMMENT_NODE", dom.COMMENT_NODE
-        print "ELEMENT_NODE", dom.ELEMENT_NODE
-        print "ATTRIBUTE_NODE", dom.ATTRIBUTE_NODE
-        print "TEXT_NODE", dom.TEXT_NODE
-        print "CDATA_SECTION_NODE", dom.CDATA_SECTION_NODE
-        print "ENTITY_NODE", dom.ENTITY_NODE
-        print "PROCESSING_INSTRUCTION_NODE", dom.PROCESSING_INSTRUCTION_NODE
-        print "COMMENT_NODE", dom.COMMENT_NODE
-        print "DOCUMENT_NODE", dom.DOCUMENT_NODE
-        print "DOCUMENT_TYPE_NODE", dom.DOCUMENT_TYPE_NODE
-        print "NOTATION_NODE", dom.NOTATION_NODE
-        '''
 
         head_tail = os.path.split(filename)
         self.__cwd__ = head_tail[0]
@@ -335,7 +325,7 @@ class PlacesXml:
                 if n.tagName == "volumetric_mask":
                     self.parseVolumetricMask( n, mc )
                 elif n.tagName == "volumetric_place":
-                    self.parseVolumetricPlace( n, mc, resolution, origin )
+                    self.parseVolumetricPlace( n, mc )
                 elif n.tagName == "point_place":
                     self.parsePointPlace( n, mc )
                 else:
@@ -350,7 +340,7 @@ class PlacesXml:
         img = np.flipud(img)
         mc.setVolumetricMask(img)
 
-    def parseVolumetricPlace( self, xml, mc, resolution, origin ):
+    def parseVolumetricPlace( self, xml, mc ):
         # <volumetric_place id="warsztat" name="warsztat" filename="img/warsztat.png" />
         assert xml.tagName == "volumetric_place"
         id_str = xml.getAttribute("id")
@@ -359,7 +349,7 @@ class PlacesXml:
 
         img = cv2.imread(self.__cwd__ + '/' + filename_str, cv2.IMREAD_GRAYSCALE)
         img = np.flipud(img)
-        mc.addVolumetricPlace(id_str, name_str, img, resolution, origin)
+        mc.addVolumetricPlace(id_str, name_str, img)
 
     def parsePointPlace( self, xml, mc ):
         # <point_place id="fotel" name="fotel" position="-0.64 0.34" front_vec="0 -1" />
@@ -514,17 +504,17 @@ def test_PlacesXML(output_path, places_xml_filename):
         pl_kuchnia = places.getPlaceById('kuchnia', mc_name)
         pl_fotel = places.getPlaceById('fotel', mc_name)
         pl_drzwi = places.getPlaceById('drzwi', mc_name)
-        pl_korytarz_c = places.getPlaceById('korytarz_c', mc_name)
+        pl_korytarz_a = places.getPlaceById('korytarz_a', mc_name)
 
         eimg_kuchnia = pl_kuchnia.getEmbeddedImage()
-        eimg_korytarz_c = pl_korytarz_c.getEmbeddedImage()
+        eimg_korytarz_a = pl_korytarz_a.getEmbeddedImage()
 
         # Draw places over the map
         eimg_map = places.getMapContext(mc_name).getMap()
 
-        i_add1 = multI( addI(eimg_map, addI(eimg_kuchnia, eimg_korytarz_c)), 0.3)
-        i_add2 = multI( addI(eimg_kuchnia, addI(eimg_map, eimg_korytarz_c)), 0.3)
-        i_add3 = multI( addI(eimg_korytarz_c, addI(eimg_kuchnia, eimg_map)), 0.3)
+        i_add1 = multI( addI(eimg_map, addI(eimg_kuchnia, eimg_korytarz_a)), 0.3)
+        i_add2 = multI( addI(eimg_kuchnia, addI(eimg_map, eimg_korytarz_a)), 0.3)
+        i_add3 = multI( addI(eimg_korytarz_a, addI(eimg_kuchnia, eimg_map)), 0.3)
 
         eimg_mask = places.getMask(mc_name)
         i_add4 = multI( addI(eimg_mask, eimg_map), 0.3)
