@@ -1,48 +1,27 @@
 #!/usr/bin/env python
 
+import numpy as np
+import math
 import sys
 import rospy
 import cv2
+import PyKDL
 
 import tiago_kb.places_xml as px
 
-def m2px(pt, res, origin):
-    #return ( int((pt[1]-origin[1])/res), int((pt[0]-origin[0])/res) )
-    return ( int((pt[0]-origin[0])/res), int((pt[1]-origin[1])/res) )
-
-def drawPointPlace(img, pl, res, origin):
-    assert pl.getType() == 'point'
-    pt = pl.getPt()
-    n = pl.getN()
-    #print pt
-    #print res
-    pt2 = (pt[0] + 2*n[0], pt[1] + 2*n[1])
-    #print int(pt[0]/res-origin[0]), int(pt[1]/res-origin[1])
-    cv2.circle( img, m2px(pt, res, origin), 20, 255, thickness=1 )
-    cv2.line( img, m2px(pt, res, origin), m2px(pt2, res, origin), 255, thickness=1 )
-
 def main():
+    # Output path for tests
+    output_path = '/home/dseredyn/tiago_public_ws'
     rospy.init_node('knowledge_base')
-    rospy.sleep(1.0)
+    rospy.sleep(0.5)
 
     places_xml = rospy.get_param('~places_xml')
+
+    #px.test_EmbeddedImage(output_path)
+    #px.test_PlacesXML(output_path, places_xml)
+
     print 'Parsing file "' + places_xml + '"'
-
     places = px.PlacesXml(places_xml)
-
-    # Test
-    output_path = '/home/dseredyn/tiago_public_ws'
-    origin = places.getMapContext('sim').getMapOrigin()
-    res = places.getMapContext('sim').getMapResolution()
-    for mc_name in ['sim', 'real']:
-        mask_sim = places.getMask(mc_name)
-        pl_kuchnia = places.getPlaceById('kuchnia', mc_name)
-        pl_fotel = places.getPlaceById('fotel', mc_name)
-        pl_drzwi = places.getPlaceById('drzwi', mc_name)
-        img = mask_sim*0.3 + pl_kuchnia.getImage()* 0.5
-        drawPointPlace(img, pl_fotel, res, origin)
-        drawPointPlace(img, pl_drzwi, res, origin)
-        cv2.imwrite(output_path + '/' + mc_name + '.png', img)
 
 if __name__ == '__main__':
     main()
