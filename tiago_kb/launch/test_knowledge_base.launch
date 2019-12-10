@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- actionlib servers -->
+    <node name="test_knowledge_base" pkg="tiago_kb" type="test_knowledge_base" respawn="false" output="screen" >
+        <param name="places_xml" value="$(find tiago_sim_integration)/maps/012_places/places.xml" />
+    </node>
+</launch>
