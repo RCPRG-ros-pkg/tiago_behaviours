@@ -29,6 +29,10 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+  PATTERN ".svn" EXCLUDE)
+
 #install(PROGRAMS
 #        nodes/rosplan_sys_control
 #        DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

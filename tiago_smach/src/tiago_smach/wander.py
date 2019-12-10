@@ -15,6 +15,8 @@ from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 
+from tiago_behaviours_msgs.msg import MoveToGoal
+
 import navigation
 
 def makePose(x, y, theta):
@@ -49,7 +51,12 @@ class PickPose(smach.State):
         elif place_name == 'sypialnia':
             pose = makePose(3, 5, math.pi/2)
 
-        userdata.pose = pose
+        result = MoveToGoal()
+        result.pose = pose
+        result.pose_valid = True
+        result.place_name = place_name
+        result.place_name_valid = True
+        userdata.pose = result
 
         return 'ok'
 

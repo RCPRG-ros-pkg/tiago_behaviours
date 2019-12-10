@@ -5,6 +5,7 @@ import smach
 import smach_ros
 import dynamic_reconfigure.client
 import actionlib
+import math
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
@@ -17,11 +18,30 @@ from pal_common_msgs.msg import *
 from geometry_msgs.msg import Pose
 import std_srvs.srv as std_srvs
 
+from tf.transformations import quaternion_from_euler
+import pl_nouns.odmiana as ro
+
 NAVIGATION_MAX_TIME_S = 100
 
-class SayImGoingTo(smach.State):
+def makePose(x, y, theta):
+    q = quaternion_from_euler(0, 0, theta)
+    result = Pose()
+    result.position.x = x
+    result.position.y = y
+    result.orientation.x = q[0]
+    result.orientation.y = q[1]
+    result.orientation.z = q[2]
+    result.orientation.w = q[3]
+    return result
+
+class GoalPlace:
+    def __init__(self):
+        self.place_name = None
+        self.pose = None
+
+class UnderstandGoal(smach.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['nav_goal_pose'],
+        smach.State.__init__(self, input_keys=['nav_goal_pose'], output_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error'])
 
         self.conversation_interface = conversation_interface
@@ -29,18 +49,67 @@ class SayImGoingTo(smach.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        try:
-            pose = userdata.nav_goal_pose.pose
-        except:
-            pose = userdata.nav_goal_pose
+        pose = userdata.nav_goal_pose.pose
+        pose_valid = userdata.nav_goal_pose.pose_valid
+        place_name = userdata.nav_goal_pose.place_name
+        place_name_valid = userdata.nav_goal_pose.place_name_valid
 
-        self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+        result = GoalPlace()
+
+        if place_name_valid:
+            result.place_name = place_name
+
+            # TODO: use KB to do this
+            if place_name == 'kuchnia':
+                pose = makePose(3, 0.2, -math.pi/2)
+            elif place_name in 'warsztat':
+                pose = makePose(1.55, 8.65, math.pi/2)
+            elif place_name == 'pok' + ro._o + 'j':
+                pose = makePose(-0.15, -0.3, math.pi/2)
+            elif place_name == 'sypialnia':
+                pose = makePose(3, 5, math.pi/2)
+            else:
+                print 'Nie wiem gdzie jest: ' + place_name
+            result.pose = pose
+        elif pose_valid:
+            # TODO: use KB to fill the place_name:
+            result.place_name = 'niewiadome'
+
+            result.pose = pose
+        else:
+            self.conversation_interface.addSpeakSentence( 'Podales niepoprawne polecenie ruchu.' )
+            return 'error'
+
+        userdata.move_goal = result
+        return 'ok'
+
+class SayImGoingTo(smach.State):
+    def __init__(self, is_simulated, conversation_interface):
+        smach.State.__init__(self, input_keys=['move_goal'],
+                             outcomes=['ok', 'preemption', 'error'])
+
+        self.conversation_interface = conversation_interface
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        #try:
+        #if True:
+        pose = userdata.move_goal.pose
+        place_name = userdata.move_goal.place_name
+        #except:
+        #    pose = userdata.nav_goal_pose
+
+        #if place_name_valid:
+        self.conversation_interface.addSpeakSentence( 'Jade do {"' + place_name + '", dopelniacz}' )
+        #elif pose_valid:
+        #    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
 
         return 'ok'
 
 class SayIArrivedTo(smach.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['nav_goal_pose'],
+        smach.State.__init__(self, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error'])
 
         self.conversation_interface = conversation_interface
@@ -48,12 +117,16 @@ class SayIArrivedTo(smach.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        try:
-            pose = userdata.nav_goal_pose.pose
-        except:
-            pose = userdata.nav_goal_pose
+        #try:
+        #    pose = userdata.nav_goal_pose.pose
+        #except:
+        #    pose = userdata.nav_goal_pose
+        pose = userdata.move_goal.pose
+        place_name = userdata.move_goal.place_name
 
-        self.conversation_interface.addSpeakSentence( 'Dojechalem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+        self.conversation_interface.addSpeakSentence( 'Dojechalem do {"' + place_name + '", dopelniacz}' )
+
+        #self.conversation_interface.addSpeakSentence( 'Dojechalem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
         return 'ok'
 
 class SetNavParams(smach.State):
@@ -130,18 +203,21 @@ class MoveTo(smach.State):
 
         smach.State.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall'],
-                             input_keys=['nav_goal_pose'])
+                             input_keys=['move_goal'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         self.conversation_interface.addExpected('q_current_task', False)
 
+        pose = userdata.move_goal.pose
+        place_name = userdata.move_goal.place_name
+
         # robot movement here - using Tiago move_base
-        try:
-            pose = userdata.nav_goal_pose.pose
-        except:
-            pose = userdata.nav_goal_pose
+        #try:
+        #    pose = userdata.nav_goal_pose.pose
+        #except:
+        #    pose = userdata.nav_goal_pose
 
         if self.is_simulated:
             for i in range(50):
@@ -286,16 +362,21 @@ class MoveToComplex(smach.StateMachine):
                                             input_keys=['nav_goal_pose'])
 
         with self:
+            smach.StateMachine.add('UnderstandGoal', UnderstandGoal(is_simulated, conversation_interface),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+                                    remapping={'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
+
             smach.StateMachine.add('SayImGoingTo', SayImGoingTo(is_simulated, conversation_interface),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'},
-                                    remapping={'nav_goal_pose':'nav_goal_pose'})
+                                    remapping={'move_goal':'move_goal'})
 
             smach.StateMachine.add('MoveTo', MoveTo(is_simulated, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps'},
-                                    remapping={'nav_goal_pose':'nav_goal_pose'})
+                                    remapping={'move_goal':'move_goal'})
 
             smach.StateMachine.add('ClearCostMaps', ClearCostMaps(is_simulated),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
 
             smach.StateMachine.add('SayIArrivedTo', SayIArrivedTo(is_simulated, conversation_interface),
-                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'})
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+                                    remapping={'move_goal':'move_goal'})

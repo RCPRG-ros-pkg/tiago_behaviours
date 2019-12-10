@@ -20,6 +20,7 @@ from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 
 import navigation
+from tiago_behaviours_msgs.msg import MoveToGoal
 
 ACK_WAIT_MAX_TIME_S = 30
 
@@ -149,8 +150,18 @@ class BringGoods(smach.StateMachine):
         self.userdata.max_lin_accel = 0.5
 
         # TODO: use knowledge base for this:
-        self.userdata.kitchen_pose = makePose(3, 0.2, -math.pi/2)
-        self.userdata.initial_pose = makePose(-0.15, -0.3, math.pi/2)   # pokoj, TODO: change to initial pose
+
+        self.userdata.kitchen_pose = MoveToGoal()
+        self.userdata.kitchen_pose.pose = makePose(3, 0.2, -math.pi/2)
+        self.userdata.kitchen_pose.pose_valid = True
+        self.userdata.kitchen_pose.place_name = 'kuchnia'
+        self.userdata.kitchen_pose.place_name_valid = True
+
+        self.userdata.initial_pose = MoveToGoal()
+        self.userdata.initial_pose.pose = makePose(-0.15, -0.3, math.pi/2)
+        self.userdata.initial_pose.pose_valid = True
+        self.userdata.initial_pose.place_name = 'pokoj'
+        self.userdata.initial_pose.place_name_valid = True
 
         with self:
             smach.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),

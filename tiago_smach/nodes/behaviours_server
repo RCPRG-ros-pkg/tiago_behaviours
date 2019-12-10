@@ -10,12 +10,15 @@ import smach_ros
 from std_msgs.msg import String
 
 from tiago_behaviours_msgs.msg import WanderAction, MoveToAction, BringGoodsAction, StopAction,\
-                                        QuestionLoadAction, QuestionCurrentTaskAction, AckAction, AckItookAction, AckIgaveAction
+                                        QuestionLoadAction, QuestionCurrentTaskAction,\
+                                        AckAction, AckItookAction, AckIgaveAction
 
 import tiago_smach.conversation
 import tiago_smach.bring_goods
 import tiago_smach.navigation
 import tiago_smach.wander
+
+import tiago_kb.places_xml as kb_p
 
 class Idle(smach.State):
     def __init__(self, action_names, conversation_interface):
@@ -130,7 +133,7 @@ class BehaviourSM(smach.StateMachine):
 #
 
 class MainSM(smach.Concurrence):
-    def __init__(self):
+    def __init__(self, kb_places):
         smach.Concurrence.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'],
@@ -302,9 +305,13 @@ class ASUniversal(smach.StateMachine):
 
 def main():
     rospy.init_node('behaviours_server')
-    rospy.sleep(1.0)
+    rospy.sleep(0.5)
 
-    main_sm = MainSM()
+    places_xml_filename = rospy.get_param('~places_xml')
+    print 'Reading KB for places from file "' + places_xml_filename + '"'
+    kb_places = kb_p.PlacesXml(places_xml_filename)
+
+    main_sm = MainSM( kb_places )
 
     list_sis = []
     sis = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
