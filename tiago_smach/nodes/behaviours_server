@@ -17,12 +17,13 @@ import tiago_smach.conversation
 import tiago_smach.bring_goods
 import tiago_smach.navigation
 import tiago_smach.wander
+import tiago_smach.smach_rcprg as smach_rcprg
 
 import tiago_kb.places_xml as kb_p
 
-class Idle(smach.State):
+class Idle(smach_rcprg.State):
     def __init__(self, action_names, conversation_interface):
-        outcomes = ['ok', 'preemption', 'error']
+        outcomes = ['ok', 'preemption', 'error', 'shutdown']
         for an in action_names:
             if an in outcomes:
                 raise Exception('The action name "' + an + '" is already in outcomes.')
@@ -30,7 +31,7 @@ class Idle(smach.State):
         self.__pending_action__ = None
         self.conversation_interface = conversation_interface
 
-        smach.State.__init__(self, output_keys=['action_goal'],
+        smach_rcprg.State.__init__(self, output_keys=['action_goal'],
                                     outcomes=outcomes)
 
     def execute(self, userdata):
@@ -39,6 +40,9 @@ class Idle(smach.State):
 
         self.conversation_interface.addExpected('q_current_task', False)
         while True:
+            if self.__shutdown__:
+                return 'shutdown'
+
             if self.preempt_requested():
                 # This state can be preempted only on shutdown
                 self.service_preempt()
@@ -54,10 +58,10 @@ class Idle(smach.State):
                 self.conversation_interface.removeExpected('q_current_task')
                 return action_name
 
-            try:
-                rospy.sleep(0.1)
-            except rospy.ROSInterruptException:
-                return 'error'
+            #try:
+            rospy.sleep(0.1)
+            #except rospy.ROSInterruptException:
+            #    return 'error'
         return 'error'
 
     def setPendingAction(self, action_name, action_goal):
@@ -75,11 +79,11 @@ class Idle(smach.State):
 # The SM that govenrs the highest-level behaviour.
 #
 
-class BehaviourSM(smach.StateMachine):
+class BehaviourSM(smach_rcprg.StateMachine):
     def __init__(self, is_simulated, conversation_interface):
-        smach.StateMachine.__init__(self, outcomes=['PREEMPTED',
+        smach_rcprg.StateMachine.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
-                                                    'FINISHED'])
+                                                    'FINISHED', 'shutdown'])
 
         state_dict = {
             'BringGoods': tiago_smach.bring_goods.BringGoods(is_simulated, conversation_interface),
@@ -88,26 +92,30 @@ class BehaviourSM(smach.StateMachine):
             }
 
         with self:
-            smach.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander'], conversation_interface),
+            smach_rcprg.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander'], conversation_interface),
                                     transitions={
                                         'ok':'FINISHED',
                                         'preemption':'PREEMPTED',
                                         'error': 'FAILED',
+                                        'shutdown':'shutdown',
                                         'bring_goods':'BringGoods',
                                         'move_to':'MoveTo',
                                         'wander':'Wander'},
                                     remapping={ })
 
-            smach.StateMachine.add('BringGoods', state_dict['BringGoods'],
-                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle'},
+            smach_rcprg.StateMachine.add('BringGoods', state_dict['BringGoods'],
+                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
+                                    'shutdown':'shutdown'},
                                     remapping={'goods_name':'action_goal'})
 
-            smach.StateMachine.add('MoveTo', state_dict['MoveTo'],
-                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle'},
+            smach_rcprg.StateMachine.add('MoveTo', state_dict['MoveTo'],
+                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
+                                    'shutdown':'shutdown'},
                                     remapping={'nav_goal_pose':'action_goal'})
 
-            smach.StateMachine.add('Wander', state_dict['Wander'],
-                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle'},
+            smach_rcprg.StateMachine.add('Wander', state_dict['Wander'],
+                                    transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
+                                    'shutdown':'shutdown'},
                                     remapping={ })
 
     def updateAction(self, action_name, action_goal):
@@ -148,13 +156,23 @@ class MainSM(smach.Concurrence):
         # The 'stop' command is valid in every situation, so do not autoremove it.
         conversation_interface.addExpected( 'stop', False )
 
-        self.behaviour_sm = BehaviourSM( False, conversation_interface )
+        self.behaviour_sm = BehaviourSM( True, conversation_interface )
         self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
 
         with self:
             # Add states to the container
             smach.Concurrence.add('task', self.behaviour_sm)
             smach.Concurrence.add('conv', self.conversation_sm)
+
+    def shutdownRequest(self):
+        self.behaviour_sm.shutdownRequest()
+        self.conversation_sm.shutdownRequest()
+        self.request_preempt()
+
+#    def on_shutdown(self):
+#        print 'MainSM.on_shutdown()'
+#        self.request_preempt()
+#        rospy.sleep(1.0)
 
 def test_concurrenceSM():
     rospy.init_node('behaviours_server_test')
@@ -304,6 +322,32 @@ class ASUniversal(smach.StateMachine):
             smach.StateMachine.add('State', ASUniversalState(main_sm), transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                         remapping={'action_name':'action_name', 'sm_goal':'sm_goal'})
 
+class SmachShutdownManager:
+    def __init__(self, main_sm, list_asw, list_sis):
+        self.__main_sm__ = main_sm
+        self.__list_asw__ = list_asw
+        self.__list_sis__ = list_sis
+
+    def on_shutdown(self):
+        # Stop all introspection servers
+        print 'SmachShutdownManager.on_shutdown: stopping all introspection servers'
+        for sis in reversed(self.__list_sis__):
+            sis.stop()
+
+        # Stop all smach_ros action servers
+        print 'SmachShutdownManager.on_shutdown: stopping all smach_ros action servers'
+        for asw in reversed(self.__list_asw__):
+            # This is a veru ugly hack:
+            asw._action_server.action_server.started = False
+
+            asw.wrapped_container.request_preempt()
+
+        # Stop the main SM
+        print 'SmachShutdownManager.on_shutdown: stopping the main SM'
+        self.__main_sm__.request_preempt()
+
+        rospy.sleep(2.0)
+
 def main():
     rospy.init_node('behaviours_server')
     rospy.sleep(0.5)
@@ -315,8 +359,9 @@ def main():
     main_sm = MainSM( kb_places )
 
     list_sis = []
-    sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
-    sis_main.start()
+    #sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
+    #sis_main.start()
+    #list_sis.append(sis_main)
 
     behaviours = [
         ('wander', WanderAction, main_sm.behaviour_sm),
@@ -336,9 +381,9 @@ def main():
         sm = ASUniversal(dest_sm, sm_name)
 
         # # Smach viewer
-        sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
-        sis.start()
-        list_sis.append( sis )
+        #sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
+        #sis.start()
+        #list_sis.append( sis )
 
         # Construct action server wrapper
         asw = smach_ros.ActionServerWrapper(
@@ -354,7 +399,10 @@ def main():
         asw.run_server()
         list_asw.append( asw )
 
+    ssm = SmachShutdownManager(main_sm, list_asw, list_sis)
 
+    # Set shutdown hook
+    rospy.on_shutdown( ssm.on_shutdown )
 
     smach_thread = threading.Thread(target=main_sm.execute)
     smach_thread.start()
@@ -362,13 +410,13 @@ def main():
     # Wait for ctrl-c
     rospy.spin()
 
-    for sis in list_sis:
-        sis.stop()
+    #for sis in list_sis:
+    #    sis.stop()
 
-    sis_main.stop()
+    #sis_main.stop()
 
     # Request the container to preempt
-    main_sm.request_preempt()
+    #main_sm.request_preempt()
 
     # Block until everything is preempted
     smach_thread.join()

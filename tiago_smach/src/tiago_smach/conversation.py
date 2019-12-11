@@ -8,14 +8,16 @@ import smach_ros
 
 from std_msgs.msg import String
 
+import smach_rcprg
+
 #
 # The SM that govenrs the highest-level conversation.
 #
 
-class HearState(smach.State):
+class HearState(smach_rcprg.State):
     def __init__(self, conversation_interface):
-        smach.State.__init__(self, output_keys=[],
-                                    outcomes=['preemption', 'should_speak', 'error'])
+        smach_rcprg.State.__init__(self, output_keys=[],
+                                    outcomes=['preemption', 'should_speak', 'error', 'shutdown'])
         self.conversation_interface = conversation_interface
         self.__items__ = set()
         self.__items_lock__ = threading.Lock()
@@ -24,6 +26,9 @@ class HearState(smach.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         while True:
+            if self.__shutdown__:
+                return 'shutdown'
+
             if self.preempt_requested():
                 self.service_preempt()
                 print 'HearState: preemption'
@@ -55,10 +60,10 @@ class HearState(smach.State):
         self.__items__.add( item )
         self.__items_lock__.release()
 
-class SpeakState(smach.State):
+class SpeakState(smach_rcprg.State):
     def __init__(self, conversation_interface):
-        smach.State.__init__(self, output_keys=[],
-                                    outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, output_keys=[],
+                                    outcomes=['ok', 'preemption', 'error', 'shutdown'])
         self.conversation_interface = conversation_interface
         self.rico_says_pub = rospy.Publisher('rico_says', String, queue_size=10)
 
@@ -66,6 +71,9 @@ class SpeakState(smach.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         while True:
+            if self.__shutdown__:
+                return 'shutdown'
+
             if self.preempt_requested():
                 self.service_preempt()
                 print 'SpeakState: preemption'
@@ -91,26 +99,28 @@ class SpeakState(smach.State):
         self.__items__.add( item )
         self.__items_lock__.release()
 
-class ConversationSM(smach.StateMachine):
+class ConversationSM(smach_rcprg.StateMachine):
     def __init__(self, conversation_interface):
-        smach.StateMachine.__init__(self,
+        smach_rcprg.StateMachine.__init__(self,
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
-                                                    'FINISHED'])
+                                                    'FINISHED', 'shutdown'])
 
         with self:
-            smach.StateMachine.add('Hear', HearState(conversation_interface),
+            smach_rcprg.StateMachine.add('Hear', HearState(conversation_interface),
                                     transitions={
                                         'should_speak':'Speak',
                                         'preemption':'PREEMPTED',
-                                        'error':'FAILED'},
+                                        'error':'FAILED',
+                                        'shutdown':'shutdown'},
                                     remapping={ })
 
-            smach.StateMachine.add('Speak', SpeakState(conversation_interface),
+            smach_rcprg.StateMachine.add('Speak', SpeakState(conversation_interface),
                                     transitions={
                                         'ok':'Hear',
                                         'preemption':'PREEMPTED',
-                                        'error':'FAILED'},
+                                        'error':'FAILED',
+                                        'shutdown':'shutdown'},
                                     remapping={ })
 
     def updateAction(self, action_name, sm_goal):

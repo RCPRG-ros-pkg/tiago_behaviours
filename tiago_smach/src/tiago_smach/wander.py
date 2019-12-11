@@ -18,6 +18,7 @@ from geometry_msgs.msg import Pose
 from tiago_behaviours_msgs.msg import MoveToGoal
 
 import navigation
+import smach_rcprg
 
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
@@ -30,10 +31,10 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     return result
 
-class PickPose(smach.State):
+class PickPose(smach_rcprg.State):
     def __init__(self, is_simulated):
-        smach.State.__init__(self, output_keys=['pose'],
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, output_keys=['pose'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -58,24 +59,29 @@ class PickPose(smach.State):
         result.place_name_valid = True
         userdata.pose = result
 
+        if self.__shutdown__:
+            return 'shutdown'
         return 'ok'
 
-class Wander(smach.StateMachine):
+class Wander(smach_rcprg.StateMachine):
     def __init__(self, is_simulated, conversation_interface):
-        smach.StateMachine.__init__(self, outcomes=['PREEMPTED',
+        smach_rcprg.StateMachine.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
-                                                    'FINISHED'])
+                                                    'FINISHED', 'shutdown'])
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
 
         with self:
-            smach.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),
-                                        transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),
+                                        transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                        'shutdown':'shutdown'},
                                         remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach.StateMachine.add('PickPose', PickPose(is_simulated),
-                                        transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
+            smach_rcprg.StateMachine.add('PickPose', PickPose(is_simulated),
+                                        transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                        'shutdown':'shutdown'})
 
-            smach.StateMachine.add('MoveTo', navigation.MoveToComplex(is_simulated, conversation_interface),
-                                        transitions={'FINISHED':'PickPose', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
+            smach_rcprg.StateMachine.add('MoveTo', navigation.MoveToComplex(is_simulated, conversation_interface),
+                                        transitions={'FINISHED':'PickPose', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+                                        'shutdown':'shutdown'},
                                         remapping={'nav_goal_pose':'pose'})

@@ -19,8 +19,10 @@ from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 
-import navigation
 from tiago_behaviours_msgs.msg import MoveToGoal
+
+import navigation
+import smach_rcprg
 
 ACK_WAIT_MAX_TIME_S = 30
 
@@ -42,10 +44,10 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     return result
 
-class SayAskForGoods(smach.State):
+class SayAskForGoods(smach_rcprg.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['goods_name'],
-                             outcomes=['ok', 'preemption', 'timeout', 'error'])
+        smach_rcprg.State.__init__(self, input_keys=['goods_name'],
+                             outcomes=['ok', 'preemption', 'timeout', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
@@ -63,6 +65,9 @@ class SayAskForGoods(smach.State):
             end_time = rospy.Time.now()
             loop_time = end_time - start_time
             loop_time_s = loop_time.secs
+
+            if self.__shutdown__:
+                return 'shutdown'
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
                 self.conversation_interface.removeExpected('ack')
@@ -91,10 +96,10 @@ class SayAskForGoods(smach.State):
 
         raise Exception('Unreachable code')
 
-class SayTakeGoods(smach.State):
+class SayTakeGoods(smach_rcprg.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['goods_name'],
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, input_keys=['goods_name'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
@@ -112,6 +117,9 @@ class SayTakeGoods(smach.State):
             end_time = rospy.Time.now()
             loop_time = end_time - start_time
             loop_time_s = loop_time.secs
+
+            if self.__shutdown__:
+                return 'shutdown'
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
                 self.conversation_interface.removeExpected('ack')
@@ -140,12 +148,12 @@ class SayTakeGoods(smach.State):
 
         raise Exception('Unreachable code')
 
-class BringGoods(smach.StateMachine):
+class BringGoods(smach_rcprg.StateMachine):
     def __init__(self, is_simulated, conversation_interface):
-        smach.StateMachine.__init__(self, input_keys=['goods_name'],
+        smach_rcprg.StateMachine.__init__(self, input_keys=['goods_name'],
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
-                                                    'FINISHED'])
+                                                    'FINISHED', 'shutdown'])
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
 
@@ -157,33 +165,33 @@ class BringGoods(smach.StateMachine):
         self.userdata.kitchen_pose.place_name = 'kuchnia'
         self.userdata.kitchen_pose.place_name_valid = True
 
-        #self.userdata.initial_pose = MoveToGoal()
-        #self.userdata.initial_pose.pose = makePose(-0.15, -0.3, math.pi/2)
-        #self.userdata.initial_pose.pose_valid = True
-        #self.userdata.initial_pose.place_name = 'pokoj'
-        #self.userdata.initial_pose.place_name_valid = True
-
         with self:
-            smach.StateMachine.add('RememberCurrentPose', navigation.RememberCurrentPose(is_simulated),
-                                    transitions={'ok':'SetNavParams', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('RememberCurrentPose', navigation.RememberCurrentPose(is_simulated),
+                                    transitions={'ok':'SetNavParams', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'current_pose':'initial_pose'})
 
-            smach.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),
-                                    transitions={'ok':'MoveToKitchen', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),
+                                    transitions={'ok':'MoveToKitchen', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
-            smach.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(is_simulated, conversation_interface),
-                                    transitions={'FINISHED':'AskForGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
+            smach_rcprg.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(is_simulated, conversation_interface),
+                                    transitions={'FINISHED':'AskForGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'nav_goal_pose':'kitchen_pose'})
 
-            smach.StateMachine.add('AskForGoods', SayAskForGoods(is_simulated, conversation_interface),
-                                    transitions={'ok':'MoveBack', 'preemption':'PREEMPTED', 'error':'FAILED', 'timeout':'AskForGoods'},
+            smach_rcprg.StateMachine.add('AskForGoods', SayAskForGoods(is_simulated, conversation_interface),
+                                    transitions={'ok':'MoveBack', 'preemption':'PREEMPTED', 'error':'FAILED',
+                                    'timeout':'AskForGoods','shutdown':'shutdown'},
                                     remapping={'goods_name':'goods_name'})
 
-            smach.StateMachine.add('MoveBack', navigation.MoveToComplex(is_simulated, conversation_interface),
-                                    transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED'},
+            smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(is_simulated, conversation_interface),
+                                    transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'nav_goal_pose':'initial_pose'})
 
-            smach.StateMachine.add('SayGiveGoods', SayTakeGoods(is_simulated, conversation_interface),
-                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('SayGiveGoods', SayTakeGoods(is_simulated, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'goods_name':'goods_name'})

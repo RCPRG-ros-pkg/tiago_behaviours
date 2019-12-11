@@ -25,6 +25,8 @@ import pl_nouns.odmiana as ro
 
 from tiago_behaviours_msgs.msg import MoveToGoal
 
+import smach_rcprg
+
 NAVIGATION_MAX_TIME_S = 100
 
 def makePose(x, y, theta):
@@ -43,10 +45,12 @@ class GoalPlace:
         self.place_name = None
         self.pose = None
 
-class RememberCurrentPose(smach.State):
+#class RememberCurrentPose(smach.State):
+class RememberCurrentPose(smach_rcprg.State):
     def __init__(self, is_simulated):
-        smach.State.__init__(self, output_keys=['current_pose'],
-                             outcomes=['ok', 'preemption', 'error'])
+        #self.__shutdown__ = False
+        smach_rcprg.State.__init__(self, output_keys=['current_pose'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.is_simulated = is_simulated
         if not self.is_simulated:
@@ -68,6 +72,8 @@ class RememberCurrentPose(smach.State):
             goal_pose.pose_valid = True
             goal_pose.place_name_valid = False
             userdata.current_pose = goal_pose
+            if self.__shutdown__:
+                return 'shutdown'
             return 'ok'
         else:
             pose_valid = False
@@ -85,15 +91,20 @@ class RememberCurrentPose(smach.State):
                     goal_pose.place_name_valid = False
                     userdata.current_pose = goal_pose
                 self.__lock__.release()
+
+                if self.__shutdown__:
+                    return 'shutdown'
                 if pose_valid:
                     return 'ok'
                 rospy.sleep(0.1)
+            if self.__shutdown__:
+                return 'shutdown'
             return 'error'
 
-class UnderstandGoal(smach.State):
+class UnderstandGoal(smach_rcprg.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['nav_goal_pose'], output_keys=['move_goal'],
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, input_keys=['nav_goal_pose'], output_keys=['move_goal'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
@@ -131,13 +142,16 @@ class UnderstandGoal(smach.State):
             self.conversation_interface.addSpeakSentence( 'Podales niepoprawne polecenie ruchu.' )
             return 'error'
 
+        if self.__shutdown__:
+            return 'shutdown'
+
         userdata.move_goal = result
         return 'ok'
 
-class SayImGoingTo(smach.State):
+class SayImGoingTo(smach_rcprg.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['move_goal'],
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
@@ -156,12 +170,15 @@ class SayImGoingTo(smach.State):
         #elif pose_valid:
         #    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
 
+        if self.__shutdown__:
+            return 'shutdown'
+
         return 'ok'
 
-class SayIArrivedTo(smach.State):
+class SayIArrivedTo(smach_rcprg.State):
     def __init__(self, is_simulated, conversation_interface):
-        smach.State.__init__(self, input_keys=['move_goal'],
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
 
@@ -177,10 +194,12 @@ class SayIArrivedTo(smach.State):
 
         self.conversation_interface.addSpeakSentence( 'Dojechalem do {"' + place_name + '", dopelniacz}' )
 
+        if self.__shutdown__:
+            return 'shutdown'
         #self.conversation_interface.addSpeakSentence( 'Dojechalem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
         return 'ok'
 
-class SetNavParams(smach.State):
+class SetNavParams(smach_rcprg.State):
     def __init__(self, is_simulated):
         self.is_simulated = is_simulated
         if is_simulated == False:
@@ -206,8 +225,8 @@ class SetNavParams(smach.State):
             else:
                 raise Exception('Local planner "' + self.local_planner_name + '" is not supported.')
 
-        smach.State.__init__(self, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -241,9 +260,11 @@ class SetNavParams(smach.State):
 
             config = self.dynparam_client.update_configuration(params)
 
+        if self.__shutdown__:
+            return 'shutdown'
         return 'ok'
 
-class MoveTo(smach.State):
+class MoveTo(smach_rcprg.State):
     def __init__(self, is_simulated, conversation_interface):
         self.current_pose = Pose()
         self.is_feedback_received = False
@@ -252,8 +273,8 @@ class MoveTo(smach.State):
         self.is_simulated = is_simulated
         self.conversation_interface = conversation_interface
 
-        smach.State.__init__(self,
-                             outcomes=['ok', 'preemption', 'error', 'stall'],
+        smach_rcprg.State.__init__(self,
+                             outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
                              input_keys=['move_goal'])
 
     def execute(self, userdata):
@@ -310,6 +331,9 @@ class MoveTo(smach.State):
                 end_time = rospy.Time.now()
                 loop_time = end_time - start_time
                 loop_time_s = loop_time.secs
+
+                if self.__shutdown__:
+                    return 'shutdown'
 
                 if loop_time_s > NAVIGATION_MAX_TIME_S:
                     # break the loop, end with error state
@@ -384,7 +408,7 @@ class MoveTo(smach.State):
         # Do nothing
         return
 
-class ClearCostMaps(smach.State):
+class ClearCostMaps(smach_rcprg.State):
     def __init__(self, is_simulated):
         if is_simulated:
             self.clear_costmaps = None
@@ -396,38 +420,47 @@ class ClearCostMaps(smach.State):
             #    print "Service call failed: %s"%e
             #    self.clear_costmaps = None
 
-        smach.State.__init__(self,
-                             outcomes=['ok', 'preemption', 'error'])
+        smach_rcprg.State.__init__(self,
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if not self.clear_costmaps is None:
             self.clear_costmaps()
-        rospy.sleep(1.0)
+        rospy.sleep(0.5)
+
+        if self.__shutdown__:
+            return 'shutdown'
         return 'ok'
 
-class MoveToComplex(smach.StateMachine):
+#class MoveToComplex(smach.StateMachine):
+class MoveToComplex(smach_rcprg.StateMachine):
     def __init__(self, is_simulated, conversation_interface):
-        smach.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED'],
+        smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
                                             input_keys=['nav_goal_pose'])
 
         with self:
-            smach.StateMachine.add('UnderstandGoal', UnderstandGoal(is_simulated, conversation_interface),
-                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(is_simulated, conversation_interface),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
 
-            smach.StateMachine.add('SayImGoingTo', SayImGoingTo(is_simulated, conversation_interface),
-                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(is_simulated, conversation_interface),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-            smach.StateMachine.add('MoveTo', MoveTo(is_simulated, conversation_interface),
-                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps'},
+            smach_rcprg.StateMachine.add('MoveTo', MoveTo(is_simulated, conversation_interface),
+                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
+                                    'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-            smach.StateMachine.add('ClearCostMaps', ClearCostMaps(is_simulated),
-                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED'})
+            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(is_simulated),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'})
 
-            smach.StateMachine.add('SayIArrivedTo', SayIArrivedTo(is_simulated, conversation_interface),
-                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(is_simulated, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
