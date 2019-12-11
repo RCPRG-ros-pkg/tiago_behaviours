@@ -2,6 +2,7 @@
 
 import rospy
 import os
+import tiago_kb.embedded_image as ei
 import tiago_kb.places_xml as px
 
 def main():
@@ -17,12 +18,14 @@ def main():
 
     places_xml = rospy.get_param('~places_xml')
 
-    px.test_EmbeddedImage(output_path)
+    ei.test_EmbeddedImage(output_path)
     px.test_PlacesXML(output_path, places_xml)
 
     # Read database with places
     #print 'Parsing file "' + places_xml + '"'
     #places = px.PlacesXml(places_xml)
+    #places = PlacesXmlParser(places_xml).getKB()
+
 
 if __name__ == '__main__':
     main()

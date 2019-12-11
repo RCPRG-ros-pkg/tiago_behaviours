@@ -354,14 +354,14 @@ def main():
 
     places_xml_filename = rospy.get_param('~places_xml')
     print 'Reading KB for places from file "' + places_xml_filename + '"'
-    kb_places = kb_p.PlacesXml(places_xml_filename)
+    kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
     main_sm = MainSM( kb_places )
 
     list_sis = []
-    #sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
-    #sis_main.start()
-    #list_sis.append(sis_main)
+    sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
+    sis_main.start()
+    list_sis.append(sis_main)
 
     behaviours = [
         ('wander', WanderAction, main_sm.behaviour_sm),
@@ -381,9 +381,9 @@ def main():
         sm = ASUniversal(dest_sm, sm_name)
 
         # # Smach viewer
-        #sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
-        #sis.start()
-        #list_sis.append( sis )
+        sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
+        sis.start()
+        list_sis.append( sis )
 
         # Construct action server wrapper
         asw = smach_ros.ActionServerWrapper(
@@ -410,18 +410,8 @@ def main():
     # Wait for ctrl-c
     rospy.spin()
 
-    #for sis in list_sis:
-    #    sis.stop()
-
-    #sis_main.stop()
-
-    # Request the container to preempt
-    #main_sm.request_preempt()
-
     # Block until everything is preempted
     smach_thread.join()
-
-    #main_sm.execute()
 
 if __name__ == '__main__':
     #test_concurrenceSM()
