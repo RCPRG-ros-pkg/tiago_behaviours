@@ -15,7 +15,7 @@ from std_msgs.msg import String
 class HearState(smach.State):
     def __init__(self, conversation_interface):
         smach.State.__init__(self, output_keys=[],
-                                    outcomes=['preemption', 'should_speak'])
+                                    outcomes=['preemption', 'should_speak', 'error'])
         self.conversation_interface = conversation_interface
         self.__items__ = set()
         self.__items_lock__ = threading.Lock()
@@ -26,6 +26,7 @@ class HearState(smach.State):
         while True:
             if self.preempt_requested():
                 self.service_preempt()
+                print 'HearState: preemption'
                 return 'preemption'
 
             self.__items_lock__.acquire()
@@ -42,7 +43,10 @@ class HearState(smach.State):
             if self.conversation_interface.hasSpeakSentence():
                 return 'should_speak'
 
-            rospy.sleep(0.1)
+            try:
+                rospy.sleep(0.1)
+            except rospy.ROSInterruptException:
+                return 'error'
 
         raise Exception('Unreachable code')
 
@@ -54,7 +58,7 @@ class HearState(smach.State):
 class SpeakState(smach.State):
     def __init__(self, conversation_interface):
         smach.State.__init__(self, output_keys=[],
-                                    outcomes=['ok', 'preemption'])
+                                    outcomes=['ok', 'preemption', 'error'])
         self.conversation_interface = conversation_interface
         self.rico_says_pub = rospy.Publisher('rico_says', String, queue_size=10)
 
@@ -64,6 +68,7 @@ class SpeakState(smach.State):
         while True:
             if self.preempt_requested():
                 self.service_preempt()
+                print 'SpeakState: preemption'
                 return 'preemption'
 
             sentence = self.conversation_interface.getSpeakSentence()
@@ -74,7 +79,10 @@ class SpeakState(smach.State):
             # TODO: use ROS action to speak the sentences (with waiting for finish)
             self.rico_says_pub.publish( sentence )
 
-            rospy.sleep(0.1)
+            try:
+                rospy.sleep(0.1)
+            except rospy.ROSInterruptException:
+                return 'error'
 
         return 'ok'
 
@@ -85,7 +93,7 @@ class SpeakState(smach.State):
 
 class ConversationSM(smach.StateMachine):
     def __init__(self, conversation_interface):
-        smach.StateMachine.__init__(self, input_keys=['sm_goal'],
+        smach.StateMachine.__init__(self,
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'])
@@ -94,13 +102,15 @@ class ConversationSM(smach.StateMachine):
             smach.StateMachine.add('Hear', HearState(conversation_interface),
                                     transitions={
                                         'should_speak':'Speak',
-                                        'preemption':'PREEMPTED'},
+                                        'preemption':'PREEMPTED',
+                                        'error':'FAILED'},
                                     remapping={ })
 
             smach.StateMachine.add('Speak', SpeakState(conversation_interface),
                                     transitions={
                                         'ok':'Hear',
-                                        'preemption':'PREEMPTED'},
+                                        'preemption':'PREEMPTED',
+                                        'error':'FAILED'},
                                     remapping={ })
 
     def updateAction(self, action_name, sm_goal):

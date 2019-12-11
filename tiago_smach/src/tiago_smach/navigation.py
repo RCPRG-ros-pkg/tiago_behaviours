@@ -6,6 +6,8 @@ import smach_ros
 import dynamic_reconfigure.client
 import actionlib
 import math
+import threading
+import copy
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
@@ -15,11 +17,13 @@ from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
 from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
 from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
 from pal_common_msgs.msg import *
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 import std_srvs.srv as std_srvs
 
 from tf.transformations import quaternion_from_euler
 import pl_nouns.odmiana as ro
+
+from tiago_behaviours_msgs.msg import MoveToGoal
 
 NAVIGATION_MAX_TIME_S = 100
 
@@ -38,6 +42,53 @@ class GoalPlace:
     def __init__(self):
         self.place_name = None
         self.pose = None
+
+class RememberCurrentPose(smach.State):
+    def __init__(self, is_simulated):
+        smach.State.__init__(self, output_keys=['current_pose'],
+                             outcomes=['ok', 'preemption', 'error'])
+
+        self.is_simulated = is_simulated
+        if not self.is_simulated:
+            self.sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.callback)
+            self.current_pose = None
+            self.__lock__ = threading.Lock()
+
+    def callback(self, data):
+        self.__lock__.acquire()
+        self.current_pose = copy.copy(data)
+        self.__lock__.release()
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        if self.is_simulated:
+            goal_pose = MoveToGoal()
+            goal_pose.pose = makePose(0, 0, 0)
+            goal_pose.pose_valid = True
+            goal_pose.place_name_valid = False
+            userdata.current_pose = goal_pose
+            return 'ok'
+        else:
+            pose_valid = False
+            for i in range(10):
+                if self.preempt_requested():
+                    self.service_preempt()
+                    return 'preemption'
+
+                self.__lock__.acquire()
+                if not self.current_pose is None:
+                    pose_valid = True
+                    goal_pose = MoveToGoal()
+                    goal_pose.pose = self.current_pose.pose.pose
+                    goal_pose.pose_valid = True
+                    goal_pose.place_name_valid = False
+                    userdata.current_pose = goal_pose
+                self.__lock__.release()
+                if pose_valid:
+                    return 'ok'
+                rospy.sleep(0.1)
+            return 'error'
 
 class UnderstandGoal(smach.State):
     def __init__(self, is_simulated, conversation_interface):

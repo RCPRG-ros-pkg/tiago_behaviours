@@ -157,13 +157,17 @@ class BringGoods(smach.StateMachine):
         self.userdata.kitchen_pose.place_name = 'kuchnia'
         self.userdata.kitchen_pose.place_name_valid = True
 
-        self.userdata.initial_pose = MoveToGoal()
-        self.userdata.initial_pose.pose = makePose(-0.15, -0.3, math.pi/2)
-        self.userdata.initial_pose.pose_valid = True
-        self.userdata.initial_pose.place_name = 'pokoj'
-        self.userdata.initial_pose.place_name_valid = True
+        #self.userdata.initial_pose = MoveToGoal()
+        #self.userdata.initial_pose.pose = makePose(-0.15, -0.3, math.pi/2)
+        #self.userdata.initial_pose.pose_valid = True
+        #self.userdata.initial_pose.place_name = 'pokoj'
+        #self.userdata.initial_pose.place_name_valid = True
 
         with self:
+            smach.StateMachine.add('RememberCurrentPose', navigation.RememberCurrentPose(is_simulated),
+                                    transitions={'ok':'SetNavParams', 'preemption':'PREEMPTED', 'error': 'FAILED'},
+                                    remapping={'current_pose':'initial_pose'})
+
             smach.StateMachine.add('SetNavParams', navigation.SetNavParams(is_simulated),
                                     transitions={'ok':'MoveToKitchen', 'preemption':'PREEMPTED', 'error': 'FAILED'},
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
