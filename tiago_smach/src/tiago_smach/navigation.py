@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# encoding: utf8
 
 import rospy
 import smach
@@ -11,11 +12,11 @@ import copy
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceAction
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionGoal
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
-from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceAction
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionGoal
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
+#from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
 from pal_common_msgs.msg import *
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 import std_srvs.srv as std_srvs
@@ -126,7 +127,7 @@ class UnderstandGoal(smach_rcprg.State):
                 pose = makePose(3, 0.2, -math.pi/2)
             elif place_name in 'warsztat':
                 pose = makePose(1.55, 8.65, math.pi/2)
-            elif place_name == 'pok' + ro._o + 'j':
+            elif place_name == 'pokój':
                 pose = makePose(-0.15, -0.3, math.pi/2)
             elif place_name == 'sypialnia':
                 pose = makePose(3, 5, math.pi/2)

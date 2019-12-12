@@ -12,13 +12,9 @@
   <buildtool_depend>catkin</buildtool_depend>
   <depend>actionlib</depend>
   <depend>actionlib_msgs</depend>
-  <depend>rosplan_tiago_core_msgs</depend>
   <depend>diagnostic_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>roscpp</depend>
-  <depend>rosplan_dispatch_msgs</depend>
-  <depend>rosplan_knowledge_msgs</depend>
-  <depend>rosplan_planning_system</depend>
   <depend>play_motion_msgs</depend>
   <depend>move_base_msgs</depend>
   <depend>rospy</depend>

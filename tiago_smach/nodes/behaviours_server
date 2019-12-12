@@ -156,7 +156,7 @@ class MainSM(smach.Concurrence):
         # The 'stop' command is valid in every situation, so do not autoremove it.
         conversation_interface.addExpected( 'stop', False )
 
-        self.behaviour_sm = BehaviourSM( True, conversation_interface )
+        self.behaviour_sm = BehaviourSM( False, conversation_interface )
         self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
 
         with self:

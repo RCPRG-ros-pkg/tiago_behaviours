@@ -7,11 +7,8 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   std_msgs
   geometry_msgs
-  rosplan_dispatch_msgs
-  rosplan_knowledge_msgs
   move_base_msgs
   play_motion_msgs
-  rosplan_tiago_core_msgs
   rospy
   tf
   message_generation

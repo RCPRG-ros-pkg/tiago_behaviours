@@ -10,11 +10,11 @@ import actionlib
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceAction
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionGoal
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
-from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
-from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceAction
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionGoal
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
+#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
+#from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
 from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
