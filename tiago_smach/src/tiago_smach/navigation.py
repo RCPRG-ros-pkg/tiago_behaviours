@@ -12,11 +12,6 @@ import copy
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceAction
-#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionGoal
-#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionFeedback
-#from rosplan_tiago_scenarios_msgs.msg import GoWithAttendanceActionResult
-#from rosplan_tiago_common.tiago_torso_controller import TiagoSpeechController, TiagoTorsoController, TiagoHeadController
 from pal_common_msgs.msg import *
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 import std_srvs.srv as std_srvs
@@ -44,20 +39,21 @@ def makePose(x, y, theta):
 class GoalPlace:
     def __init__(self):
         self.place_name = None
+        self.place_name_valid = False
         self.pose = None
+        self.pose_valid = False
 
-#class RememberCurrentPose(smach.State):
 class RememberCurrentPose(smach_rcprg.State):
-    def __init__(self, is_simulated):
-        #self.__shutdown__ = False
+    def __init__(self, sim_mode):
         smach_rcprg.State.__init__(self, output_keys=['current_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
-        self.is_simulated = is_simulated
-        if not self.is_simulated:
-            self.sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.callback)
-            self.current_pose = None
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.sim_mode = sim_mode
+        if self.sim_mode in ['gazebo', 'real']:
             self.__lock__ = threading.Lock()
+            self.current_pose = None
+            self.sub = rospy.Subscriber("/amcl_pose", PoseWithCovarianceStamped, self.callback)
 
     def callback(self, data):
         self.__lock__.acquire()
@@ -67,7 +63,7 @@ class RememberCurrentPose(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        if self.is_simulated:
+        if self.sim_mode == 'sim':
             goal_pose = MoveToGoal()
             goal_pose.pose = makePose(0, 0, 0)
             goal_pose.pose_valid = True
@@ -103,11 +99,13 @@ class RememberCurrentPose(smach_rcprg.State):
             return 'error'
 
 class UnderstandGoal(smach_rcprg.State):
-    def __init__(self, is_simulated, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['nav_goal_pose'], output_keys=['move_goal'],
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        smach_rcprg.State.__init__(self, input_keys=['nav_goal_pose', 'in_current_pose'], output_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
-        self.conversation_interface = conversation_interface
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.sim_mode = sim_mode
+        self.kb_places = kb_places
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -119,29 +117,41 @@ class UnderstandGoal(smach_rcprg.State):
 
         result = GoalPlace()
 
-        if place_name_valid:
-            result.place_name = place_name
-
-            # TODO: use KB to do this
-            if place_name == 'kuchnia':
-                pose = makePose(3, 0.2, -math.pi/2)
-            elif place_name in 'warsztat':
-                pose = makePose(1.55, 8.65, math.pi/2)
-            elif place_name == 'pokój':
-                pose = makePose(-0.15, -0.3, math.pi/2)
-            elif place_name == 'sypialnia':
-                pose = makePose(3, 5, math.pi/2)
-            else:
-                print 'Nie wiem gdzie jest: ' + place_name
-            result.pose = pose
-        elif pose_valid:
-            # TODO: use KB to fill the place_name:
-            result.place_name = 'niewiadome'
-
-            result.pose = pose
+        if self.sim_mode == 'sim':
+            pose = makePose(0, 0, 0)
         else:
-            self.conversation_interface.addSpeakSentence( 'Podales niepoprawne polecenie ruchu.' )
-            return 'error'
+            if self.sim_mode == 'real':
+                mc_name = 'real'
+            elif self.sim_mode == 'gazebo':
+                mc_name = 'sim'
+
+            if not pose_valid:
+                if not place_name_valid:
+                    return 'error'
+
+                result.place_name = place_name
+                current_pose = userdata.in_current_pose
+                pt_start = (current_pose.pose.position.x, current_pose.pose.position.y)
+
+                try:
+                    pl = self.kb_places.getPlaceByName(place_name, mc_name)
+                except:
+                    userdata.move_goal = result
+                    return 'error'
+
+                pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name)
+                pose = makePose(pt_dest[0], pt_dest[1], 0.0)
+            else:
+                place_pos = (pose.position.x, pose.position.y)
+                result_place_id = self.kb_places.whatIsAt(place_pos, mc_name)
+                if result_place_id is None:
+                    result.place_name = 'nieznane'
+                else:
+                    pl = self.kb_places.getPlaceById(result_place_id, mc_name)
+                    result.place_name = pl.getName()
+
+        result.pose = pose
+        result.place_name = place_name
 
         if self.__shutdown__:
             return 'shutdown'
@@ -150,7 +160,7 @@ class UnderstandGoal(smach_rcprg.State):
         return 'ok'
 
 class SayImGoingTo(smach_rcprg.State):
-    def __init__(self, is_simulated, conversation_interface):
+    def __init__(self, sim_mode, conversation_interface):
         smach_rcprg.State.__init__(self, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
@@ -176,8 +186,27 @@ class SayImGoingTo(smach_rcprg.State):
 
         return 'ok'
 
+class SayIdontKnow(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface):
+        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+                             outcomes=['ok', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        place_name = userdata.move_goal.place_name
+
+        self.conversation_interface.addSpeakSentence( 'Nie wiem gdzie jest {"' + place_name + '", mianownik}' )
+
+        if self.__shutdown__:
+            return 'shutdown'
+
+        return 'ok'
+
 class SayIArrivedTo(smach_rcprg.State):
-    def __init__(self, is_simulated, conversation_interface):
+    def __init__(self, sim_mode, conversation_interface):
         smach_rcprg.State.__init__(self, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
@@ -201,9 +230,10 @@ class SayIArrivedTo(smach_rcprg.State):
         return 'ok'
 
 class SetNavParams(smach_rcprg.State):
-    def __init__(self, is_simulated):
-        self.is_simulated = is_simulated
-        if is_simulated == False:
+    def __init__(self, sim_mode):
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.sim_mode = sim_mode
+        if sim_mode in ['gazebo', 'real']:
             base_local_planner = rospy.get_param('/move_base/base_local_planner')
             self.local_planner_name = base_local_planner.split('/')[-1]
 
@@ -232,7 +262,7 @@ class SetNavParams(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        if self.is_simulated:
+        if self.sim_mode == 'sim':
             rospy.sleep(1.0)
         else:
             max_lin_vel = userdata.max_lin_vel_in
@@ -266,12 +296,13 @@ class SetNavParams(smach_rcprg.State):
         return 'ok'
 
 class MoveTo(smach_rcprg.State):
-    def __init__(self, is_simulated, conversation_interface):
+    def __init__(self, sim_mode, conversation_interface):
+        assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
         self.is_feedback_received = False
         self.move_base_status = GoalStatus.PENDING
         self.is_goal_achieved = False
-        self.is_simulated = is_simulated
+        self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
         smach_rcprg.State.__init__(self,
@@ -286,13 +317,7 @@ class MoveTo(smach_rcprg.State):
         pose = userdata.move_goal.pose
         place_name = userdata.move_goal.place_name
 
-        # robot movement here - using Tiago move_base
-        #try:
-        #    pose = userdata.nav_goal_pose.pose
-        #except:
-        #    pose = userdata.nav_goal_pose
-
-        if self.is_simulated:
+        if self.sim_mode == 'sim':
             for i in range(50):
                 if self.preempt_requested():
                     self.conversation_interface.removeExpected('q_current_task')
@@ -373,7 +398,7 @@ class MoveTo(smach_rcprg.State):
             elif self.move_base_status == GoalStatus.ABORTED:
                 # The goal was aborted during execution by the action server due
                 #    to some failure (Terminal State)
-                return 'error'
+                return 'stall'
             elif self.move_base_status == GoalStatus.REJECTED:
                 # The goal was rejected by the action server without being processed,
                 #    because the goal was unattainable or invalid (Terminal State)
@@ -410,8 +435,9 @@ class MoveTo(smach_rcprg.State):
         return
 
 class ClearCostMaps(smach_rcprg.State):
-    def __init__(self, is_simulated):
-        if is_simulated:
+    def __init__(self, sim_mode):
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        if sim_mode == 'sim':
             self.clear_costmaps = None
         else:
             rospy.wait_for_service('/move_base/clear_costmaps')
@@ -437,31 +463,40 @@ class ClearCostMaps(smach_rcprg.State):
 
 #class MoveToComplex(smach.StateMachine):
 class MoveToComplex(smach_rcprg.StateMachine):
-    def __init__(self, is_simulated, conversation_interface):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
                                             input_keys=['nav_goal_pose'])
 
         with self:
-            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(is_simulated, conversation_interface),
-                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+            smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
+                                    transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
-                                    remapping={'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
+                                    remapping={'current_pose':'current_pose'})
 
-            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(is_simulated, conversation_interface),
+            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
+                                    'shutdown':'shutdown'},
+                                    remapping={'in_current_pose':'current_pose', 'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-            smach_rcprg.StateMachine.add('MoveTo', MoveTo(is_simulated, conversation_interface),
+            smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(is_simulated),
+            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'})
 
-            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(is_simulated, conversation_interface),
+            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
                                     transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
+                                    transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})

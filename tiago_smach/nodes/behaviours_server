@@ -22,7 +22,7 @@ import tiago_smach.smach_rcprg as smach_rcprg
 import tiago_kb.places_xml as kb_p
 
 class Idle(smach_rcprg.State):
-    def __init__(self, action_names, conversation_interface):
+    def __init__(self, action_names, conversation_interface, kb_places):
         outcomes = ['ok', 'preemption', 'error', 'shutdown']
         for an in action_names:
             if an in outcomes:
@@ -80,19 +80,13 @@ class Idle(smach_rcprg.State):
 #
 
 class BehaviourSM(smach_rcprg.StateMachine):
-    def __init__(self, is_simulated, conversation_interface):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED', 'shutdown'])
 
-        state_dict = {
-            'BringGoods': tiago_smach.bring_goods.BringGoods(is_simulated, conversation_interface),
-            'MoveTo': tiago_smach.navigation.MoveToComplex(is_simulated, conversation_interface),
-            'Wander': tiago_smach.wander.Wander(is_simulated, conversation_interface),
-            }
-
         with self:
-            smach_rcprg.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander'], conversation_interface),
+            smach_rcprg.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander'], conversation_interface, kb_places),
                                     transitions={
                                         'ok':'FINISHED',
                                         'preemption':'PREEMPTED',
@@ -103,17 +97,20 @@ class BehaviourSM(smach_rcprg.StateMachine):
                                         'wander':'Wander'},
                                     remapping={ })
 
-            smach_rcprg.StateMachine.add('BringGoods', state_dict['BringGoods'],
+            smach_rcprg.StateMachine.add('BringGoods',
+                                    tiago_smach.bring_goods.BringGoods(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
                                     'shutdown':'shutdown'},
                                     remapping={'goods_name':'action_goal'})
 
-            smach_rcprg.StateMachine.add('MoveTo', state_dict['MoveTo'],
+            smach_rcprg.StateMachine.add('MoveTo',
+                                    tiago_smach.navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
                                     'shutdown':'shutdown'},
                                     remapping={'nav_goal_pose':'action_goal'})
 
-            smach_rcprg.StateMachine.add('Wander', state_dict['Wander'],
+            smach_rcprg.StateMachine.add('Wander',
+                                    tiago_smach.wander.Wander(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
                                     'shutdown':'shutdown'},
                                     remapping={ })
@@ -142,7 +139,7 @@ class BehaviourSM(smach_rcprg.StateMachine):
 #
 
 class MainSM(smach.Concurrence):
-    def __init__(self, kb_places):
+    def __init__(self, sim_mode, kb_places):
         smach.Concurrence.__init__(self, outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED'],
@@ -156,7 +153,7 @@ class MainSM(smach.Concurrence):
         # The 'stop' command is valid in every situation, so do not autoremove it.
         conversation_interface.addExpected( 'stop', False )
 
-        self.behaviour_sm = BehaviourSM( False, conversation_interface )
+        self.behaviour_sm = BehaviourSM( sim_mode, conversation_interface, kb_places )
         self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
 
         with self:
@@ -353,10 +350,13 @@ def main():
     rospy.sleep(0.5)
 
     places_xml_filename = rospy.get_param('~places_xml')
+    sim_mode = str(rospy.get_param('~sim_mode'))
+    assert sim_mode in ['sim', 'gazebo', 'real']
+
     print 'Reading KB for places from file "' + places_xml_filename + '"'
     kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
-    main_sm = MainSM( kb_places )
+    main_sm = MainSM( sim_mode, kb_places )
 
     list_sis = []
     sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')

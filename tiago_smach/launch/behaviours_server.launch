@@ -1,7 +1,10 @@
 <?xml version="1.0"?>
 <launch>
+    <arg name="sim_mode" />
+
     <!-- actionlib servers -->
     <node name="behaviours_server_launch" pkg="tiago_smach" type="behaviours_server" respawn="false" output="screen" >
         <param name="places_xml" value="$(find tiago_sim_integration)/maps/012_places/places.xml" />
+        <param name="sim_mode" value="$(arg sim_mode)" />
     </node>
 </launch>

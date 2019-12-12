@@ -245,7 +245,7 @@ class KBPlaces:
                 return pl_id
         return None
 
-    def getClosestPointOfPlace(self, pt_start, pl_id, mc_name):
+    def getClosestPointOfPlace(self, pt_start, pl_id, mc_name, dbg_output_path=None):
         pl = self.getPlaceById(pl_id, mc_name)
         mask = self.getMask(mc_name)
 
@@ -266,30 +266,37 @@ class KBPlaces:
         img_pl = iop.binaryImage( pl.getEmbeddedImage().getImage(), 0.5)
         img_pl_shrinked = op_enl2.compute({'img':img_pl})['img']
 
-        cv2.imwrite( dbg_output_path + '/mask.png', iop.normalizeImage(img_mask) )
-        cv2.imwrite( dbg_output_path + '/mask_shrinked.png', iop.normalizeImage(img_mask_shrinked) )
+        if not dbg_output_path is None:
+            cv2.imwrite( dbg_output_path + '/mask.png', iop.normalizeImage(img_mask) )
+            cv2.imwrite( dbg_output_path + '/mask_shrinked.png', iop.normalizeImage(img_mask_shrinked) )
 
         phi_emb = mask.emptyCopy()
         ei.drawCircle(phi_emb, pt_start, int( 0.1 / res), 1, -1)
         phi = 1-2*phi_emb.getImage()
-        cv2.imwrite( dbg_output_path + '/phi.png', iop.normalizeImage(phi) )
+
+        if not dbg_output_path is None:
+            cv2.imwrite( dbg_output_path + '/phi.png', iop.normalizeImage(phi) )
 
         phi = np.ma.MaskedArray(phi, 1-img_mask_shrinked)
         start_pt_dist = skfmm.distance(phi, dx=1e-2).data
         start_pt_dist_max = np.max(start_pt_dist)
         start_pt_dist[img_mask_shrinked==0] = start_pt_dist_max+1
 
-        cv2.imwrite( dbg_output_path + '/start_pt_dist.png', iop.normalizeImage(start_pt_dist) )
+        if not dbg_output_path is None:
+            cv2.imwrite( dbg_output_path + '/start_pt_dist.png', iop.normalizeImage(start_pt_dist) )
 
         pl_dist_img = np.multiply( start_pt_dist, img_pl_shrinked )
         pl_dist_img[img_mask_shrinked==0] = start_pt_dist_max+1
         pl_dist_img[img_pl_shrinked==0] = start_pt_dist_max+1
 
-        cv2.imwrite( dbg_output_path + '/pl_dist_img.png', iop.normalizeImage(pl_dist_img) )
+        if not dbg_output_path is None:
+            cv2.imwrite( dbg_output_path + '/pl_dist_img.png', iop.normalizeImage(pl_dist_img) )
 
         iy,ix = np.unravel_index(np.argmin(pl_dist_img, axis=None), pl_dist_img.shape)
         cv2.circle(img_mask, (ix,iy), 5, 2, thickness=1)
-        cv2.imwrite( dbg_output_path + '/img_mask_goal.png', iop.normalizeImage(img_mask) )
+
+        if not dbg_output_path is None:
+            cv2.imwrite( dbg_output_path + '/img_mask_goal.png', iop.normalizeImage(img_mask) )
 
         return ( ix * res + orig[0], iy * res + orig[1])
 
@@ -366,7 +373,8 @@ class PlacesXmlParser:
         # <volumetric_place id="warsztat" name="warsztat" filename="img/warsztat.png" />
         assert xml.tagName == "volumetric_place"
         id_str = xml.getAttribute("id")
-        name_str = xml.getAttribute("name")
+        name_str = xml.getAttribute("name").encode('utf-8')
+        print 'parseVolumetricPlace', id_str, name_str
         filename_str = xml.getAttribute("filename")
 
         img = cv2.imread(self.__cwd__ + '/' + filename_str, cv2.IMREAD_GRAYSCALE)
@@ -377,7 +385,7 @@ class PlacesXmlParser:
         # <point_place id="fotel" name="fotel" position="-0.64 0.34" front_vec="0 -1" />
         assert xml.tagName == "point_place"
         id_str = xml.getAttribute("id")
-        name_str = xml.getAttribute("name")
+        name_str = xml.getAttribute("name").encode('utf-8')
         position_str = xml.getAttribute("position")
         front_vec_str = xml.getAttribute("front_vec")
 
