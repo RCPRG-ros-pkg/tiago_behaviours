@@ -129,7 +129,6 @@ class UnderstandGoal(smach_rcprg.State):
                 if not place_name_valid:
                     return 'error'
 
-                result.place_name = place_name
                 current_pose = userdata.in_current_pose
                 pt_start = (current_pose.pose.position.x, current_pose.pose.position.y)
 
@@ -145,10 +144,10 @@ class UnderstandGoal(smach_rcprg.State):
                 place_pos = (pose.position.x, pose.position.y)
                 result_place_id = self.kb_places.whatIsAt(place_pos, mc_name)
                 if result_place_id is None:
-                    result.place_name = 'nieznane'
+                    place_name = 'nieznane'
                 else:
                     pl = self.kb_places.getPlaceById(result_place_id, mc_name)
-                    result.place_name = pl.getName()
+                    place_name = pl.getName()
 
         result.pose = pose
         result.place_name = place_name
@@ -177,7 +176,7 @@ class SayImGoingTo(smach_rcprg.State):
         #    pose = userdata.nav_goal_pose
 
         #if place_name_valid:
-        self.conversation_interface.addSpeakSentence( 'Jade do {"' + place_name + '", dopelniacz}' )
+        self.conversation_interface.addSpeakSentence( 'Jadę do {"' + place_name + '", dopelniacz}' )
         #elif pose_valid:
         #    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
 
@@ -325,7 +324,7 @@ class MoveTo(smach_rcprg.State):
                     return 'preemption'
 
                 if self.conversation_interface.consumeItem('q_current_task'):
-                    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+                    self.conversation_interface.addSpeakSentence( 'Jadę do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
                 rospy.sleep(0.1)
             return 'ok'
         else:
@@ -375,7 +374,7 @@ class MoveTo(smach_rcprg.State):
                     return 'preemption'
 
                 if self.conversation_interface.consumeItem('q_current_task'):
-                    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+                    self.conversation_interface.addSpeakSentence( 'Jadę do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
 
                 rospy.sleep(0.1)
 

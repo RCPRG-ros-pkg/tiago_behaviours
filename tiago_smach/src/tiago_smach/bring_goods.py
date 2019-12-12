@@ -87,7 +87,7 @@ class SayAskForGoods(smach_rcprg.State):
 class SayTakeGoods(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
         smach_rcprg.State.__init__(self, input_keys=['goods_name'],
-                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+                             outcomes=['ok', 'preemption', 'error', 'shutdown', 'timeout'])
 
         self.conversation_interface = conversation_interface
 
@@ -148,8 +148,7 @@ class BringGoods(smach_rcprg.StateMachine):
         # TODO: use knowledge base for this:
 
         self.userdata.kitchen_pose = MoveToGoal()
-        self.userdata.kitchen_pose.pose = makePose(3, 0.2, -math.pi/2)
-        self.userdata.kitchen_pose.pose_valid = True
+        self.userdata.kitchen_pose.pose_valid = False
         self.userdata.kitchen_pose.place_name = 'kuchnia'
         self.userdata.kitchen_pose.place_name_valid = True
 
@@ -181,5 +180,5 @@ class BringGoods(smach_rcprg.StateMachine):
 
             smach_rcprg.StateMachine.add('SayGiveGoods', SayTakeGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown'},
+                                    'shutdown':'shutdown', 'timeout':'SayGiveGoods'},
                                     remapping={'goods_name':'goods_name'})
