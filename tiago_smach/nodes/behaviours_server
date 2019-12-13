@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# encoding: utf8
 
 import sys
 import time
@@ -49,7 +50,7 @@ class Idle(smach_rcprg.State):
                 return 'error'
 
             if self.conversation_interface.consumeItem('q_current_task'):
-                self.conversation_interface.addSpeakSentence( 'Nic nie robie.' )
+                self.conversation_interface.addSpeakSentence( u'Nic nie robię.' )
 
             if self.hasPendingAction():
                 action_name, action_goal = self.takePendingAction()
@@ -104,7 +105,7 @@ class BehaviourSM(smach_rcprg.StateMachine):
                                     remapping={'goods_name':'action_goal'})
 
             smach_rcprg.StateMachine.add('MoveTo',
-                                    tiago_smach.navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+                                    tiago_smach.navigation.MoveToComplexTorsoMid(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
                                     'shutdown':'shutdown'},
                                     remapping={'nav_goal_pose':'action_goal'})

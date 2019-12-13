@@ -43,7 +43,7 @@ class PickPose(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        places = ['kuchnia', 'warsztat', 'pokój', 'salon']
+        places = [u'kuchnia', u'warsztat', u'pokój', u'salon']
         place_name = random.choice( places )
 
         out_pose = MoveToGoal()
@@ -63,12 +63,18 @@ class Wander(smach_rcprg.StateMachine):
                                                     'FINISHED', 'shutdown'])
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
+        self.userdata.default_height = 0.2
 
         with self:
             smach_rcprg.StateMachine.add('SetNavParams', navigation.SetNavParams(sim_mode),
-                                        transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                        transitions={'ok':'SetHeight', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                         'shutdown':'shutdown'},
                                         remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
+
+            smach_rcprg.StateMachine.add('SetHeight', navigation.SetHeight(sim_mode, conversation_interface),
+                                        transitions={'ok':'PickPose', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                        'shutdown':'shutdown'},
+                                        remapping={'torso_height':'default_height'})
 
             smach_rcprg.StateMachine.add('PickPose', PickPose(sim_mode, kb_places),
                                         transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',

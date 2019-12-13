@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# encoding: utf8
 
 import threading
 
@@ -39,7 +40,7 @@ class HearState(smach_rcprg.State):
 
             if unknown_items:
                 print 'unknown_items: ', unknown_items
-                self.conversation_interface.addSpeakSentence('Nie rozumie pytania')
+                self.conversation_interface.addSpeakSentence(u'Nie rozumię pytania')
 
             # TODO: react to unknown items
             self.__items__ = set()
@@ -177,8 +178,11 @@ class ConversationInterface:
         return consumed
 
     def addSpeakSentence(self, sentence):
+        assert isinstance(sentence, unicode)
+        str_sentence = str(sentence.encode('utf-8'))
+        print 'addSpeakSentence', type(sentence), sentence, type(str_sentence), str_sentence
         self.__mutex__.acquire()
-        self.__speak_list__.append(sentence)
+        self.__speak_list__.append( str_sentence )
         self.__mutex__.release()
 
     def hasSpeakSentence(self):

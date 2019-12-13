@@ -253,7 +253,7 @@ class KBPlaces:
         orig = mask.getOrigin()
 
         # Shrink the mask
-        radius_m = 0.3
+        radius_m = 0.4
         radius_px = int( radius_m / res)
         op_enl = iop.OperationEnlarge(radius_px, 0)
         img_mask = iop.binaryImage( mask.getImage(), 0.5 )
@@ -373,7 +373,7 @@ class PlacesXmlParser:
         # <volumetric_place id="warsztat" name="warsztat" filename="img/warsztat.png" />
         assert xml.tagName == "volumetric_place"
         id_str = xml.getAttribute("id")
-        name_str = xml.getAttribute("name").encode('utf-8')
+        name_str = xml.getAttribute("name").encode('utf-8').decode('utf-8')
         print 'parseVolumetricPlace', id_str, name_str
         filename_str = xml.getAttribute("filename")
 
@@ -385,7 +385,7 @@ class PlacesXmlParser:
         # <point_place id="fotel" name="fotel" position="-0.64 0.34" front_vec="0 -1" />
         assert xml.tagName == "point_place"
         id_str = xml.getAttribute("id")
-        name_str = xml.getAttribute("name").encode('utf-8')
+        name_str = xml.getAttribute("name").encode('utf-8').encode('utf-8').decode('utf-8')
         position_str = xml.getAttribute("position")
         front_vec_str = xml.getAttribute("front_vec")
 
@@ -429,7 +429,7 @@ def test_PlacesXML(output_path, places_xml_filename):
         pl_kuchnia = places.getPlaceById('kuchnia', mc_name)
         pl_fotel = places.getPlaceById('fotel', mc_name)
         pl_drzwi = places.getPlaceById('drzwi', mc_name)
-        pl_korytarz_a = places.getPlaceById('korytarz_a', mc_name)
+        pl_korytarz_a = places.getPlaceById('korytarz', mc_name)
 
         eimg_kuchnia = pl_kuchnia.getEmbeddedImage()
         eimg_korytarz_a = pl_korytarz_a.getEmbeddedImage()
@@ -456,8 +456,8 @@ def test_PlacesXML(output_path, places_xml_filename):
         cv2.imwrite(output_path + '/' + mc_name + '_map5.png', i_add5.getImage())
 
     test_places = [
-        ('korytarz_a', (2.9, 2.3)),
-        ('korytarz_b', (3.65, 6.5)),
+        ('korytarz', (2.9, 2.3)),
+        ('przesmyk', (3.65, 6.5)),
         ('kuchnia', (2.9, -0.6)),
         ('salon', (0.0, 0.0)),
         ('pokoj', (3.0, 5.0)),
@@ -485,3 +485,10 @@ def test_PlacesXML(output_path, places_xml_filename):
     place_id = 'kuchnia'
     closest_pt = places.getClosestPointOfPlace( (0, 0), place_id, 'sim')
     print 'closest_pt to place "' + place_id + '": ' + str(closest_pt)
+
+
+    id_list = places.getPlacesIds()
+    for place_id in id_list:
+        pl = places.getPlaceById(place_id, 'sim')
+        name = pl.getName()
+        print type(name), name

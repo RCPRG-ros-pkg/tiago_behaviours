@@ -22,6 +22,7 @@ import pl_nouns.odmiana as ro
 from tiago_behaviours_msgs.msg import MoveToGoal
 
 import smach_rcprg
+import tiago_torso_controller
 
 NAVIGATION_MAX_TIME_S = 100
 
@@ -112,8 +113,16 @@ class UnderstandGoal(smach_rcprg.State):
 
         pose = userdata.nav_goal_pose.pose
         pose_valid = userdata.nav_goal_pose.pose_valid
-        place_name = userdata.nav_goal_pose.place_name
         place_name_valid = userdata.nav_goal_pose.place_name_valid
+        if place_name_valid:
+            if isinstance(userdata.nav_goal_pose.place_name, str):
+                place_name = userdata.nav_goal_pose.place_name.decode('utf-8')
+            elif isinstance(userdata.nav_goal_pose.place_name, unicode):
+                place_name = userdata.nav_goal_pose.place_name
+            else:
+                raise Exception('Unexpected type of place_name: "' + str(type(place_name)) + '"')
+        else:
+            place_name = u'nieznane'
 
         result = GoalPlace()
 
@@ -138,24 +147,64 @@ class UnderstandGoal(smach_rcprg.State):
                     userdata.move_goal = result
                     return 'error'
 
-                pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name)
+                pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
                 pose = makePose(pt_dest[0], pt_dest[1], 0.0)
             else:
                 place_pos = (pose.position.x, pose.position.y)
                 result_place_id = self.kb_places.whatIsAt(place_pos, mc_name)
                 if result_place_id is None:
-                    place_name = 'nieznane'
+                    place_name = u'nieznane'
                 else:
                     pl = self.kb_places.getPlaceById(result_place_id, mc_name)
-                    place_name = pl.getName()
+                    place_name = pl.getName()   # returns unicode
+                    assert isinstance(place_name, unicode)
 
         result.pose = pose
+        assert isinstance(place_name, unicode)
         result.place_name = place_name
 
         if self.__shutdown__:
             return 'shutdown'
 
         userdata.move_goal = result
+        return 'ok'
+
+class SetHeight(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface):
+        smach_rcprg.State.__init__(self, input_keys=['torso_height'],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.sim_mode = sim_mode
+        if self.sim_mode in ['gazebo', 'real']:
+            self.torso_controller = tiago_torso_controller.TiagoTorsoController()
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        if self.sim_mode == 'sim':
+            return 'ok'
+
+        current_height = self.torso_controller.get_torso_height()
+
+        if current_height is None:
+            return 'error'
+
+        if abs(current_height - userdata.torso_height) > 0.05:
+            self.torso_controller.set_torso_height(userdata.torso_height)
+            for i in range(30):
+                if self.preempt_requested():
+                    self.conversation_interface.removeExpected('q_current_task')
+                    self.service_preempt()
+                    return 'preemption'
+
+                if self.conversation_interface.consumeItem('q_current_task'):
+                    self.conversation_interface.addSpeakSentence( u'Zmieniam wysokość.' )
+                rospy.sleep(0.1)
+
+        if self.__shutdown__:
+            return 'shutdown'
         return 'ok'
 
 class SayImGoingTo(smach_rcprg.State):
@@ -168,17 +217,11 @@ class SayImGoingTo(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        #try:
-        #if True:
         pose = userdata.move_goal.pose
         place_name = userdata.move_goal.place_name
-        #except:
-        #    pose = userdata.nav_goal_pose
 
-        #if place_name_valid:
-        self.conversation_interface.addSpeakSentence( 'Jadę do {"' + place_name + '", dopelniacz}' )
-        #elif pose_valid:
-        #    self.conversation_interface.addSpeakSentence( 'Jade do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+        assert isinstance(place_name, unicode)
+        self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -196,8 +239,8 @@ class SayIdontKnow(smach_rcprg.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.place_name
-
-        self.conversation_interface.addSpeakSentence( 'Nie wiem gdzie jest {"' + place_name + '", mianownik}' )
+        assert isinstance(place_name, unicode)
+        self.conversation_interface.addSpeakSentence( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -220,8 +263,8 @@ class SayIArrivedTo(smach_rcprg.State):
         #    pose = userdata.nav_goal_pose
         pose = userdata.move_goal.pose
         place_name = userdata.move_goal.place_name
-
-        self.conversation_interface.addSpeakSentence( 'Dojechalem do {"' + place_name + '", dopelniacz}' )
+        assert isinstance(place_name, unicode)
+        self.conversation_interface.addSpeakSentence( u'Dojechalem do {"' + place_name + u'", dopelniacz}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -324,7 +367,7 @@ class MoveTo(smach_rcprg.State):
                     return 'preemption'
 
                 if self.conversation_interface.consumeItem('q_current_task'):
-                    self.conversation_interface.addSpeakSentence( 'Jadę do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+                    self.conversation_interface.addSpeakSentence( u'Jadę do pozycji ' + unicode(pose.position.x) + u', ' + unicode(pose.position.y) )
                 rospy.sleep(0.1)
             return 'ok'
         else:
@@ -374,7 +417,7 @@ class MoveTo(smach_rcprg.State):
                     return 'preemption'
 
                 if self.conversation_interface.consumeItem('q_current_task'):
-                    self.conversation_interface.addSpeakSentence( 'Jadę do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+                    self.conversation_interface.addSpeakSentence( u'Jadę do pozycji ' + unicode(pose.position.x) + u', ' + unicode(pose.position.y) )
 
                 rospy.sleep(0.1)
 
@@ -460,7 +503,6 @@ class ClearCostMaps(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-#class MoveToComplex(smach.StateMachine):
 class MoveToComplex(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
@@ -481,6 +523,52 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'})
+
+            smach_rcprg.StateMachine.add('SayIArrivedTo', SayIArrivedTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayIdontKnow', SayIdontKnow(sim_mode, conversation_interface),
+                                    transitions={'ok':'FAILED', 'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
+                                            input_keys=['nav_goal_pose'])
+
+        self.userdata.default_height = 0.2
+
+        with self:
+            smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
+                                    transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'current_pose':'current_pose'})
+
+            smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
+                                    transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
+                                    'shutdown':'shutdown'},
+                                    remapping={'in_current_pose':'current_pose', 'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
+                                    transitions={'ok':'SetHeightMid', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'move_goal':'move_goal'})
+
+            smach_rcprg.StateMachine.add('SetHeightMid', SetHeight(sim_mode, conversation_interface),
+                                    transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    'shutdown':'shutdown'},
+                                    remapping={'torso_height':'default_height'})
 
             smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
