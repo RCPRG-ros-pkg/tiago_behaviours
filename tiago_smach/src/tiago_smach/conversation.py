@@ -40,7 +40,7 @@ class HearState(smach_rcprg.State):
 
             if unknown_items:
                 print 'unknown_items: ', unknown_items
-                self.conversation_interface.addSpeakSentence(u'Nie rozumię pytania')
+                self.conversation_interface.addSpeakSentence(u'Nie rozumiem pytania')
 
             # TODO: react to unknown items
             self.__items__ = set()
