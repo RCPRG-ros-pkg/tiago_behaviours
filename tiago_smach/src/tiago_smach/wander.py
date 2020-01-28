@@ -20,6 +20,8 @@ from tiago_behaviours_msgs.msg import MoveToGoal
 import navigation
 import smach_rcprg
 
+from task_manager import PoseDescription
+
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
     result = Pose()
@@ -33,7 +35,7 @@ def makePose(x, y, theta):
 
 class PickPose(smach_rcprg.State):
     def __init__(self, sim_mode, kb_places):
-        smach_rcprg.State.__init__(self, input_keys=['in_current_pose'], output_keys=['out_pose'],
+        smach_rcprg.State.__init__(self, input_keys=['in_current_pose'], output_keys=['nav_goal_task'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -46,11 +48,7 @@ class PickPose(smach_rcprg.State):
         places = [u'kuchnia', u'warsztat', u'pokój', u'salon']
         place_name = random.choice( places )
 
-        out_pose = MoveToGoal()
-        out_pose.pose_valid = False
-        out_pose.place_name = place_name
-        out_pose.place_name_valid = True
-        userdata.out_pose = out_pose
+        userdata.nav_goal_task = PoseDescription({'place_name':place_name})
 
         if self.__shutdown__:
             return 'shutdown'
@@ -79,9 +77,9 @@ class Wander(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('PickPose', PickPose(sim_mode, kb_places),
                                         transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                         'shutdown':'shutdown'},
-                                        remapping={'out_pose':'pose'})
+                                        remapping={'nav_goal_task':'nav_goal_task'})
 
             smach_rcprg.StateMachine.add('MoveTo', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                         transitions={'FINISHED':'PickPose', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                         'shutdown':'shutdown'},
-                                        remapping={'nav_goal_pose':'pose'})
+                                        remapping={'goal':'nav_goal_task'})

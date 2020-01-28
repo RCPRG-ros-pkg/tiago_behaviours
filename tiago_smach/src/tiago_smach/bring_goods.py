@@ -20,6 +20,8 @@ from tiago_behaviours_msgs.msg import MoveToGoal
 import navigation
 import smach_rcprg
 
+import task_manager
+
 ACK_WAIT_MAX_TIME_S = 30
 
 def makePose(x, y, theta):
@@ -43,10 +45,9 @@ class SayAskForGoods(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        if isinstance(userdata.goods_name.goods_name, unicode):
-            goods_name = userdata.goods_name.goods_name
-        else:
-            goods_name = userdata.goods_name.goods_name.decode('utf-8')
+        assert isinstance(userdata.goods_name, unicode)
+
+        goods_name = userdata.goods_name
 
         self.conversation_interface.addSpeakSentence( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
@@ -100,10 +101,9 @@ class SayTakeGoods(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        if isinstance(userdata.goods_name.goods_name, unicode):
-            goods_name = userdata.goods_name.goods_name
-        else:
-            goods_name = userdata.goods_name.goods_name.decode('utf-8')
+        assert isinstance(userdata.goods_name, unicode)
+
+        goods_name = userdata.goods_name
 
         self.conversation_interface.addSpeakSentence( u'Odbierz {"' + goods_name + u'", biernik} i potwierdź' )
 
@@ -147,9 +147,24 @@ class SayTakeGoods(smach_rcprg.State):
 
         raise Exception('Unreachable code')
 
+class SayIFinished(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface):
+        smach_rcprg.State.__init__(self,
+                             outcomes=['ok', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
+
 class BringGoods(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.StateMachine.__init__(self, input_keys=['goods_name'],
+        smach_rcprg.StateMachine.__init__(self, input_keys=['goal'],
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED', 'shutdown'])
@@ -158,10 +173,7 @@ class BringGoods(smach_rcprg.StateMachine):
 
         # TODO: use knowledge base for this:
 
-        self.userdata.kitchen_pose = MoveToGoal()
-        self.userdata.kitchen_pose.pose_valid = False
-        self.userdata.kitchen_pose.place_name = u'kuchnia'
-        self.userdata.kitchen_pose.place_name_valid = True
+        self.userdata.kitchen_pose = navigation.PoseDescription({'place_name':u'kuchnia'})
         self.userdata.default_height = 0.2
         self.userdata.lowest_height = 0.0
 
@@ -184,7 +196,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'SetHeightLow', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
-                                    remapping={'nav_goal_pose':'kitchen_pose'})
+                                    remapping={'goal':'kitchen_pose'})
 
             smach_rcprg.StateMachine.add('SetHeightLow', navigation.SetHeight(sim_mode, conversation_interface),
                                     transitions={'ok':'AskForGoods', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -194,19 +206,22 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('AskForGoods', SayAskForGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'MoveBack', 'preemption':'PREEMPTED', 'error':'FAILED',
                                     'timeout':'AskForGoods','shutdown':'shutdown'},
-                                    remapping={'goods_name':'goods_name'})
+                                    remapping={'goods_name':'goal'})
 
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
-                                    remapping={'nav_goal_pose':'initial_pose'})
+                                    remapping={'goal':'initial_pose'})
 
             smach_rcprg.StateMachine.add('SayGiveGoods', SayTakeGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'SetHeightEnd', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown', 'timeout':'SayGiveGoods'},
-                                    remapping={'goods_name':'goods_name'})
+                                    remapping={'goods_name':'goal'})
 
             smach_rcprg.StateMachine.add('SetHeightEnd', navigation.SetHeight(sim_mode, conversation_interface),
-                                    transitions={'ok':'FINISHED', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    transitions={'ok':'SayIFinished', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'torso_height':'default_height'})
+
+            smach_rcprg.StateMachine.add('SayIFinished', SayIFinished(sim_mode, conversation_interface),
+                                    transitions={'ok':'FINISHED', 'shutdown':'shutdown'})

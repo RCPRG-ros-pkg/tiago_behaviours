@@ -23,8 +23,10 @@ from tiago_behaviours_msgs.msg import MoveToGoal
 
 import smach_rcprg
 import tiago_torso_controller
+from task_manager import PoseDescription
 
 NAVIGATION_MAX_TIME_S = 100
+
 
 def makePose(x, y, theta):
     q = quaternion_from_euler(0, 0, theta)
@@ -36,13 +38,6 @@ def makePose(x, y, theta):
     result.orientation.z = q[2]
     result.orientation.w = q[3]
     return result
-
-class GoalPlace:
-    def __init__(self):
-        self.place_name = None
-        self.place_name_valid = False
-        self.pose = None
-        self.pose_valid = False
 
 class RememberCurrentPose(smach_rcprg.State):
     def __init__(self, sim_mode):
@@ -65,11 +60,7 @@ class RememberCurrentPose(smach_rcprg.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if self.sim_mode == 'sim':
-            goal_pose = MoveToGoal()
-            goal_pose.pose = makePose(0, 0, 0)
-            goal_pose.pose_valid = True
-            goal_pose.place_name_valid = False
-            userdata.current_pose = goal_pose
+            userdata.current_pose = PoseDescription( {'pose':makePose(0, 0, 0)} )
             if self.__shutdown__:
                 return 'shutdown'
             return 'ok'
@@ -83,11 +74,11 @@ class RememberCurrentPose(smach_rcprg.State):
                 self.__lock__.acquire()
                 if not self.current_pose is None:
                     pose_valid = True
-                    goal_pose = MoveToGoal()
-                    goal_pose.pose = self.current_pose.pose.pose
-                    goal_pose.pose_valid = True
-                    goal_pose.place_name_valid = False
-                    userdata.current_pose = goal_pose
+                    #goal_pose = MoveToGoal()
+                    #goal_pose.pose = self.current_pose.pose.pose
+                    #goal_pose.pose_valid = True
+                    #goal_pose.place_name_valid = False
+                    userdata.current_pose = PoseDescription( {'pose':self.current_pose.pose.pose} )
                 self.__lock__.release()
 
                 if self.__shutdown__:
@@ -101,7 +92,7 @@ class RememberCurrentPose(smach_rcprg.State):
 
 class UnderstandGoal(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.State.__init__(self, input_keys=['nav_goal_pose', 'in_current_pose'], output_keys=['move_goal'],
+        smach_rcprg.State.__init__(self, input_keys=['in_current_pose', 'goal_pose'], output_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -111,20 +102,38 @@ class UnderstandGoal(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        pose = userdata.nav_goal_pose.pose
-        pose_valid = userdata.nav_goal_pose.pose_valid
-        place_name_valid = userdata.nav_goal_pose.place_name_valid
-        if place_name_valid:
-            if isinstance(userdata.nav_goal_pose.place_name, str):
-                place_name = userdata.nav_goal_pose.place_name.decode('utf-8')
-            elif isinstance(userdata.nav_goal_pose.place_name, unicode):
-                place_name = userdata.nav_goal_pose.place_name
-            else:
-                raise Exception('Unexpected type of place_name: "' + str(type(place_name)) + '"')
-        else:
-            place_name = u'nieznane'
+        #assert isinstance( userdata.goal_pose, PoseDescription )
 
-        result = GoalPlace()
+        print userdata.goal_pose
+        if 'place_name' in userdata.goal_pose.parameters:
+            place_name = userdata.goal_pose.parameters['place_name']
+            pose_valid = False
+            place_name_valid = True
+            pose = None
+            print 'place_name', place_name
+        elif 'pose' in userdata.goal_pose.parameters:
+            pose = userdata.goal_pose.parameters['pose']
+            pose_valid = True
+            place_name_valid = False
+            place_name = u'nieznane'
+            print 'pose', pose
+        else:
+            raise Exception('Parameters are missing')
+        #elif not userdata.nav_goal_pose is None:
+        #    pose = userdata.nav_goal_pose.pose
+        #    pose_valid = userdata.nav_goal_pose.pose_valid
+        #    place_name_valid = userdata.nav_goal_pose.place_name_valid
+        #    if place_name_valid:
+        #        if isinstance(userdata.nav_goal_pose.place_name, str):
+        #            place_name = userdata.nav_goal_pose.place_name.decode('utf-8')
+        #        elif isinstance(userdata.nav_goal_pose.place_name, unicode):
+        #            place_name = userdata.nav_goal_pose.place_name
+        #        else:
+        #            raise Exception('Unexpected type of place_name: "' + str(type(place_name)) + '"')
+        #    else:
+        #        place_name = u'nieznane'
+
+        assert isinstance(place_name, unicode)
 
         if self.sim_mode == 'sim':
             pose = makePose(0, 0, 0)
@@ -139,12 +148,12 @@ class UnderstandGoal(smach_rcprg.State):
                     return 'error'
 
                 current_pose = userdata.in_current_pose
-                pt_start = (current_pose.pose.position.x, current_pose.pose.position.y)
+                pt_start = (current_pose.parameters['pose'].position.x, current_pose.parameters['pose'].position.y)
 
                 try:
                     pl = self.kb_places.getPlaceByName(place_name, mc_name)
                 except:
-                    userdata.move_goal = result
+                    userdata.move_goal = PoseDescription( {'pose':pose, 'place_name':place_name} )
                     return 'error'
 
                 pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
@@ -159,9 +168,8 @@ class UnderstandGoal(smach_rcprg.State):
                     place_name = pl.getName()   # returns unicode
                     assert isinstance(place_name, unicode)
 
-        result.pose = pose
         assert isinstance(place_name, unicode)
-        result.place_name = place_name
+        result = PoseDescription( {'pose':pose, 'place_name':place_name} )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -217,8 +225,8 @@ class SayImGoingTo(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        pose = userdata.move_goal.pose
-        place_name = userdata.move_goal.place_name
+        pose = userdata.move_goal.parameters['pose']
+        place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
         self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
@@ -238,7 +246,7 @@ class SayIdontKnow(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        place_name = userdata.move_goal.place_name
+        place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         self.conversation_interface.addSpeakSentence( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
 
@@ -257,12 +265,8 @@ class SayIArrivedTo(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
-        #try:
-        #    pose = userdata.nav_goal_pose.pose
-        #except:
-        #    pose = userdata.nav_goal_pose
-        pose = userdata.move_goal.pose
-        place_name = userdata.move_goal.place_name
+        pose = userdata.move_goal.parameters['pose']
+        place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         self.conversation_interface.addSpeakSentence( u'Dojechalem do {"' + place_name + u'", dopelniacz}' )
 
@@ -356,8 +360,8 @@ class MoveTo(smach_rcprg.State):
 
         self.conversation_interface.addExpected('q_current_task', False)
 
-        pose = userdata.move_goal.pose
-        place_name = userdata.move_goal.place_name
+        pose = userdata.move_goal.parameters['pose']
+        place_name = userdata.move_goal.parameters['place_name']
 
         if self.sim_mode == 'sim':
             for i in range(50):
@@ -506,9 +510,13 @@ class ClearCostMaps(smach_rcprg.State):
 class MoveToComplex(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
-                                            input_keys=['nav_goal_pose'])
+                                            input_keys=['goal'])
 
         with self:
+#            smach_rcprg.StateMachine.add('ProcessMoveToCommand', ProcessMoveToCommand(sim_mode),
+#                                    transitions={'ok':'RememberCurrentPose', 'shutdown':'shutdown'},
+#                                    remapping={'goal_task':'goal_task', 'goal_pose':'goal_pose'})
+
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
                                     transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
@@ -517,7 +525,7 @@ class MoveToComplex(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
                                     transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
                                     'shutdown':'shutdown'},
-                                    remapping={'in_current_pose':'current_pose', 'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
+                                    remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
 
             smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -545,11 +553,15 @@ class MoveToComplex(smach_rcprg.StateMachine):
 class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
-                                            input_keys=['nav_goal_pose'])
+                                            input_keys=['goal'])
 
         self.userdata.default_height = 0.2
 
         with self:
+#            smach_rcprg.StateMachine.add('ProcessMoveToCommand', ProcessMoveToCommand(sim_mode),
+#                                    transitions={'ok':'RememberCurrentPose', 'shutdown':'shutdown'},
+#                                    remapping={'goal_task':'goal_task', 'goal_pose':'goal_pose'})
+
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
                                     transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
@@ -558,7 +570,7 @@ class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('UnderstandGoal', UnderstandGoal(sim_mode, conversation_interface, kb_places),
                                     transitions={'ok':'SayImGoingTo', 'preemption':'PREEMPTED', 'error': 'SayIdontKnow',
                                     'shutdown':'shutdown'},
-                                    remapping={'in_current_pose':'current_pose', 'nav_goal_pose':'nav_goal_pose', 'move_goal':'move_goal'})
+                                    remapping={'in_current_pose':'current_pose', 'goal_pose':'goal', 'move_goal':'move_goal'})
 
             smach_rcprg.StateMachine.add('SayImGoingTo', SayImGoingTo(sim_mode, conversation_interface),
                                     transitions={'ok':'SetHeightMid', 'preemption':'PREEMPTED', 'error': 'FAILED',

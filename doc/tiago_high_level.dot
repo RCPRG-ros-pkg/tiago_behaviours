@@ -1,0 +1,133 @@
+digraph tiago_high_level {
+    rankdir = "LR";
+    behaviours_server
+    talker
+
+    {
+        rank=sink;
+        cloud [label="Google cloud\ndialogflow" shape=cylinder];
+        soundplay_node;
+        rosbridge_websocket;
+#        tiago_task_manager;
+        vad;
+    }
+
+    {
+        rank=source;
+        robot [shape=box3d];
+    }
+    robot -> msg_robot_state -> behaviours_server;
+    
+    #behaviours_server -> msg_robot_commands -> robot;
+    robot -> msg_robot_commands -> behaviours_server [dir=back];    # The same as above, but visualized better
+
+    talker -> msg_vad_active -> vad;
+
+    #vad -> msg_wav_send -> talker;
+    talker -> msg_wav_send -> vad [dir=back];    # The same as above, but visualized better
+
+    talker -> msg_cloud_in -> cloud;
+
+    #cloud -> msg_cloud_out -> talker;
+    talker -> msg_cloud_out -> cloud [dir=back];    # The same as above, but visualized better
+
+    #talker -> msg_rico_cmd -> behaviours_server;
+    behaviours_server -> msg_rico_cmd -> talker [dir=back];    # The same as above, but visualized better
+
+    #tiago_task_manager -> msg_actions_goals -> behaviours_server;
+    #behaviours_server -> msg_actions_results -> tiago_task_manager;
+
+    behaviours_server -> msg_rico_says -> talker;
+
+    talker -> msg_robotsound -> soundplay_node;
+    talker -> msg_sound_play_goal -> soundplay_node;
+
+    #soundplay_node -> msg_sound_play_result -> talker;
+    talker -> msg_sound_play_result -> soundplay_node [dir=back];    # The same as above, but visualized better
+
+    talker -> msg_txt_msg -> rosbridge_websocket;
+    
+    #rosbridge_websocket -> msg_txt_send -> talker;
+    talker -> msg_txt_send -> rosbridge_websocket [dir=back];    # The same as above, but visualized better
+
+    #
+    # Messages:
+    #
+
+    msg_rico_cmd [shape=box label="rico_cmd"];
+
+    msg_rico_says [shape=box label="rico_says"];
+
+    msg_robotsound [shape=box label="robotsound"];
+
+    msg_sound_play_goal [shape=box label="sound_play action\ngoal"];
+
+    msg_sound_play_result [shape=box label="sound_play action\nresult and feedback"];
+
+    msg_txt_msg [shape=box label="txt_msg"];
+
+    msg_txt_send [shape=box label="txt_send"];
+
+    msg_cloud_in [shape=box label="text\naudio"];
+
+    msg_cloud_out [shape=box label="intent\naudio"];
+
+    msg_robot_state [shape=box label="robot_state"];
+
+    msg_robot_commands [shape=box label="robot_commands"];
+
+    msg_wav_send [shape=box label="wav_send"];
+
+    msg_vad_active [shape=box label="vad_active"];
+
+#    msg_actions_goals [shape=plain label=<
+#<TABLE BORDER="1">
+#<TR><TD BORDER="0" ALIGN="LEFT"><B>Action goal</B></TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">wander</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">bring_goods</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">move_to</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">stop</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">q_current_task</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">q_load</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">ack</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">ack_i_gave</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">ack_i_took</TD></TR>
+#</TABLE> >];
+
+#    msg_actions_results [shape=plain label=<
+#<TABLE BORDER="1">
+#<TR><TD BORDER="0" ALIGN="LEFT"><B>Action feedback</B></TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT"><B>and result</B></TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">wander</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">bring_goods</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">move_to</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">stop</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">q_current_task</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">q_load</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">ack</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">ack_i_gave</TD></TR>
+#<TR><TD BORDER="0" ALIGN="LEFT">ack_i_took</TD></TR>
+#</TABLE> >];
+
+    # Notes:
+    note_behaviours_server [label="Manages high-level\lbehaviours.\l" shape=note style=filled bgcolor=gray];
+    note_behaviours_server -> behaviours_server [dir=none style=dotted]
+
+    #note_tiago_task_manager [label="Translates text to\lformat that robot understands\l" shape=note style=filled bgcolor=gray];
+    #note_tiago_task_manager -> tiago_task_manager [dir=none style=dotted];
+
+    note_talker [label="Main interface for verbal communication.\lCommunicates with Google cloud." shape=note style=filled bgcolor=gray];
+    note_talker -> talker [dir=none style=dotted];
+
+    note_cloud [label="Processes text and audio\lto detect intents and to\lgenerate audio responses.\l" shape=note style=filled bgcolor=gray];
+    note_cloud -> cloud [dir=none style=dotted];
+
+    note_rosbridge_websocket [label="Chat app\lDirect interaction with human:\lReads commands and writes responses.\l" shape=note style=filled bgcolor=gray];
+    note_rosbridge_websocket -> rosbridge_websocket [dir=none style=dotted];
+
+    note_soundplay_node [label="Plays sounds\lDirect interaction with human:\lspeaks responses.\l" shape=note style=filled bgcolor=gray];
+    note_soundplay_node -> soundplay_node [dir=none style=dotted];
+
+    note_vad [label="Voice activity detector.\lDetects and records voice.\lDirect interaction with human:\llistens to commands.\l" shape=note style=filled bgcolor=gray];
+    note_vad -> vad [dir=none style=dotted];
+}

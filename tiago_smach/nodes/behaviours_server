@@ -22,6 +22,8 @@ import tiago_smach.smach_rcprg as smach_rcprg
 
 import tiago_kb.places_xml as kb_p
 
+from tiago_smach.task_manager import TaskManager
+
 class Idle(smach_rcprg.State):
     def __init__(self, action_names, conversation_interface, kb_places):
         outcomes = ['ok', 'preemption', 'error', 'shutdown']
@@ -30,9 +32,10 @@ class Idle(smach_rcprg.State):
                 raise Exception('The action name "' + an + '" is already in outcomes.')
             outcomes.append( an )
         self.__pending_action__ = None
+        self.__pending_task__ = None
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.State.__init__(self, output_keys=['action_goal'],
+        smach_rcprg.State.__init__(self, output_keys=['action_goal', 'goal'],
                                     outcomes=outcomes)
 
     def execute(self, userdata):
@@ -55,9 +58,19 @@ class Idle(smach_rcprg.State):
             if self.hasPendingAction():
                 action_name, action_goal = self.takePendingAction()
                 userdata.action_goal = action_goal
+                userdata.goal_task = None
                 print 'Idle: hasPendingAction: ' + action_name
                 self.conversation_interface.removeExpected('q_current_task')
                 return action_name
+
+            elif self.hasPendingTask():
+                task = self.takePendingTask()
+                userdata.action_goal = None
+                if not task.getGoal() is None:
+                    userdata.goal = task.getGoal()
+                print 'Idle: hasPendingTask: ' + task.getName()
+                self.conversation_interface.removeExpected('q_current_task')
+                return task.getName()
 
             #try:
             rospy.sleep(0.1)
@@ -75,6 +88,17 @@ class Idle(smach_rcprg.State):
         pending_action = self.__pending_action__
         self.__pending_action__ = None
         return pending_action
+
+    def setPendingTask(self, task):
+        self.__pending_task__ = task
+
+    def hasPendingTask(self):
+        return not self.__pending_task__ is None
+
+    def takePendingTask(self):
+        pending_task = self.__pending_task__
+        self.__pending_task__ = None
+        return pending_task
 
 #
 # The SM that govenrs the highest-level behaviour.
@@ -102,13 +126,13 @@ class BehaviourSM(smach_rcprg.StateMachine):
                                     tiago_smach.bring_goods.BringGoods(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
                                     'shutdown':'shutdown'},
-                                    remapping={'goods_name':'action_goal'})
+                                    remapping={'goal':'goal'})
 
             smach_rcprg.StateMachine.add('MoveTo',
                                     tiago_smach.navigation.MoveToComplexTorsoMid(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Idle', 'PREEMPTED':'Idle', 'FAILED': 'Idle',
                                     'shutdown':'shutdown'},
-                                    remapping={'nav_goal_pose':'action_goal'})
+                                    remapping={'goal':'goal'})
 
             smach_rcprg.StateMachine.add('Wander',
                                     tiago_smach.wander.Wander(sim_mode, conversation_interface, kb_places),
@@ -135,6 +159,30 @@ class BehaviourSM(smach_rcprg.StateMachine):
             else:
                 print 'Could not switch to another state when not Idle'
 
+    def newTaskCallback(self, task):
+        print 'BehaviourSM.newTaskCallback( "' + task.getName() + '")' #, "' + str(task) + '"" )'
+
+        if not task.getName() in ['move_to', 'bring_goods', 'wander', 'stop']:
+            # Do nothing
+            return
+
+        if task.getName() == 'stop':
+            print 'active states: ', self.get_active_states()
+            if 'Idle' in self.get_active_states():
+                print 'Requested "stop", but the current state is "Idle". Nothing to stop'
+            else:
+                # Preempt the active states
+                for state_name in self.get_active_states():
+                    # TODO: some concurrent states are not preemptable (e.g. Conversation)
+                    st = self.get_children()[state_name]
+                    print 'requesting preempt for state ' + state_name
+                    st.request_preempt()
+        else:
+            if 'Idle' in self.get_active_states():
+                self.get_children()['Idle'].setPendingTask( task )
+            else:
+                print 'Could not switch to another state when not Idle'
+
 #
 #
 #
@@ -156,6 +204,8 @@ class MainSM(smach.Concurrence):
 
         self.behaviour_sm = BehaviourSM( sim_mode, conversation_interface, kb_places )
         self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
+
+        commands_interface = TaskManager([self.behaviour_sm.newTaskCallback, self.conversation_sm.newTaskCallback])
 
         with self:
             # Add states to the container
@@ -359,11 +409,11 @@ def main():
 
     main_sm = MainSM( sim_mode, kb_places )
 
-    list_sis = []
     sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
     sis_main.start()
+    '''
+    list_sis = []
     list_sis.append(sis_main)
-
     behaviours = [
         ('wander', WanderAction, main_sm.behaviour_sm),
         ('move_to', MoveToAction, main_sm.behaviour_sm),
@@ -399,8 +449,9 @@ def main():
         # Run the server in a background thread
         asw.run_server()
         list_asw.append( asw )
-
     ssm = SmachShutdownManager(main_sm, list_asw, list_sis)
+    '''
+    ssm = SmachShutdownManager(main_sm, [], [sis_main])
 
     # Set shutdown hook
     rospy.on_shutdown( ssm.on_shutdown )

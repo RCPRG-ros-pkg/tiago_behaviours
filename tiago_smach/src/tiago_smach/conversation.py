@@ -128,6 +128,15 @@ class ConversationSM(smach_rcprg.StateMachine):
         print 'ConversationSM.updateAction ' + action_name
         self.get_children()['Hear'].add( action_name )
 
+    def newTaskCallback(self, task):
+        print 'ConversationSM.newTaskCallback( "' + task.getName() + '")'
+
+        if not task.getName() in ['q_load', 'q_current_task', 'ack', 'ack_i_gave', 'ack_i_took']:
+            # Do nothing
+            return
+
+        self.get_children()['Hear'].add( task.getName() )
+
 class ConversationInterface:
     def __init__(self):
         self.__expected_items__ = set()
