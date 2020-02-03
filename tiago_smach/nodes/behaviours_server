@@ -26,7 +26,7 @@ from tiago_smach.task_manager import TaskManager
 
 class Idle(smach_rcprg.State):
     def __init__(self, action_names, conversation_interface, kb_places):
-        outcomes = ['ok', 'preemption', 'error', 'shutdown']
+        outcomes = ['error', 'shutdown']
         for an in action_names:
             if an in outcomes:
                 raise Exception('The action name "' + an + '" is already in outcomes.')
@@ -76,7 +76,7 @@ class Idle(smach_rcprg.State):
             rospy.sleep(0.1)
             #except rospy.ROSInterruptException:
             #    return 'error'
-        return 'error'
+        raise Exception('Unreachable code')
 
     def setPendingAction(self, action_name, action_goal):
         self.__pending_action__ = ( action_name, action_goal )
@@ -106,15 +106,11 @@ class Idle(smach_rcprg.State):
 
 class BehaviourSM(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.StateMachine.__init__(self, outcomes=['PREEMPTED',
-                                                    'FAILED',
-                                                    'FINISHED', 'shutdown'])
+        smach_rcprg.StateMachine.__init__(self, outcomes=['FAILED', 'shutdown'])
 
         with self:
             smach_rcprg.StateMachine.add('Idle', Idle(['bring_goods', 'move_to', 'wander'], conversation_interface, kb_places),
                                     transitions={
-                                        'ok':'FINISHED',
-                                        'preemption':'PREEMPTED',
                                         'error': 'FAILED',
                                         'shutdown':'shutdown',
                                         'bring_goods':'BringGoods',
@@ -194,7 +190,7 @@ class MainSM(smach.Concurrence):
                                                     'FINISHED'],
                                         default_outcome='FINISHED',
                                         outcome_map={'FINISHED':
-                                            { 'task':'FINISHED',
+                                            { 'task':'FAILED',
                                                 'conv':'FINISHED'}})
 
         # Create conversation interface that is shared between all states and SMs.
@@ -411,46 +407,7 @@ def main():
 
     sis_main = smach_ros.IntrospectionServer('behaviour_server', main_sm, '/SM_BEHAVIOUR_SERVER')
     sis_main.start()
-    '''
-    list_sis = []
-    list_sis.append(sis_main)
-    behaviours = [
-        ('wander', WanderAction, main_sm.behaviour_sm),
-        ('move_to', MoveToAction, main_sm.behaviour_sm),
-        ('bring_goods', BringGoodsAction, main_sm.behaviour_sm),
-        ('stop', StopAction, main_sm.behaviour_sm),
-        ('q_load', QuestionLoadAction, main_sm.conversation_sm),
-        ('q_current_task', QuestionCurrentTaskAction, main_sm.conversation_sm),
-        ('ack', AckAction, main_sm.conversation_sm),
-        ('ack_i_took', AckItookAction, main_sm.conversation_sm),
-        ('ack_i_gave', AckIgaveAction, main_sm.conversation_sm),
-    ]
 
-    list_asw = []
-    for sm_name, action_class, dest_sm in behaviours:
-        # Construct state machine
-        sm = ASUniversal(dest_sm, sm_name)
-
-        # # Smach viewer
-        sis = smach_ros.IntrospectionServer(sm_name + '_server', sm, '/SM_' + sm_name.upper() + '_SERVER')
-        sis.start()
-        list_sis.append( sis )
-
-        # Construct action server wrapper
-        asw = smach_ros.ActionServerWrapper(
-            server_name=sm_name,
-            action_spec=action_class,
-            wrapped_container=sm,
-            succeeded_outcomes=['FINISHED'],
-            aborted_outcomes=['FAILED'],
-            preempted_outcomes=['PREEMPTED'],
-            goal_key='sm_goal')
-
-        # Run the server in a background thread
-        asw.run_server()
-        list_asw.append( asw )
-    ssm = SmachShutdownManager(main_sm, list_asw, list_sis)
-    '''
     ssm = SmachShutdownManager(main_sm, [], [sis_main])
 
     # Set shutdown hook
