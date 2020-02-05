@@ -1,0 +1,99 @@
+#!/usr/bin/env python
+# encoding: utf8
+
+import sys
+
+import rospy
+import smach
+import smach_ros
+
+import tiago_smach.conversation
+import tiago_smach.wander
+import tiago_smach.smach_rcprg as smach_rcprg
+from tiago_smach.dynamic_agent import DynAgent
+
+import tiago_kb.places_xml as kb_p
+
+from tiago_smach.task_manager import PoseDescription
+
+import pl_nouns.odmiana as ro
+
+
+class Cleanup(smach_rcprg.State):
+    def __init__(self, conversation_interface):
+        self.conversation_interface = conversation_interface
+
+        smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print 'Cleanup.execute'
+        self.conversation_interface.setShutdown()
+        return 'ok'
+
+#
+# The SM that govenrs the highest-level behaviour.
+#
+
+class BehaviourSM(smach_rcprg.StateMachine):
+    def __init__(self, sim_mode, conversation_interface, kb_places):
+        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'])
+
+        with self:
+            smach_rcprg.StateMachine.add('Wander',
+                                    tiago_smach.wander.Wander(sim_mode, conversation_interface, kb_places),
+                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup',
+                                    'shutdown':'shutdown'},
+                                    remapping={ })
+
+            smach_rcprg.StateMachine.add('Cleanup',
+                                    Cleanup(conversation_interface),
+                                    transitions={'ok':'Finished', 'shutdown':'shutdown'},
+                                    remapping={ })
+
+#
+#
+#
+
+class MainSM(smach.Concurrence):
+    def __init__(self):
+        smach.Concurrence.__init__(self, outcomes=['PREEMPTED',
+                                                    'FAILED',
+                                                    'FINISHED'],
+                                        default_outcome='FINISHED',
+                                        outcome_map={'FINISHED':
+                                            { 'task':'Finished'}})
+
+        places_xml_filename = rospy.get_param('/kb_places_xml')
+        sim_mode = str(rospy.get_param('/sim_mode'))
+        assert sim_mode in ['sim', 'gazebo', 'real']
+
+        print 'Reading KB for places from file "' + places_xml_filename + '"'
+        kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
+
+        # Create conversation interface that is shared between all states and SMs.
+        conversation_interface = tiago_smach.conversation.ConversationInterface()
+        # The 'stop' command is valid in every situation, so do not autoremove it.
+        #conversation_interface.addExpected( 'stop', False )
+
+        self.behaviour_sm = BehaviourSM( sim_mode, conversation_interface, kb_places )
+        self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
+
+        with self:
+            # Add states to the container
+            smach.Concurrence.add('task', self.behaviour_sm)
+            smach.Concurrence.add('conv', self.conversation_sm)
+
+    def shutdownRequest(self):
+        self.behaviour_sm.shutdownRequest()
+        self.conversation_sm.shutdownRequest()
+        self.request_preempt()
+
+def main():
+    da = DynAgent( 'wander' )
+    da.run( MainSM() )
+
+    return 0
+
+if __name__ == '__main__':
+    main()

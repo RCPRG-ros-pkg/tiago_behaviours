@@ -145,6 +145,7 @@ class UnderstandGoal(smach_rcprg.State):
 
             if not pose_valid:
                 if not place_name_valid:
+                    print 'UnderstandGoal place_name is not valid'
                     return 'error'
 
                 current_pose = userdata.in_current_pose
@@ -154,6 +155,7 @@ class UnderstandGoal(smach_rcprg.State):
                     pl = self.kb_places.getPlaceByName(place_name, mc_name)
                 except:
                     userdata.move_goal = PoseDescription( {'pose':pose, 'place_name':place_name} )
+                    print 'UnderstandGoal place_name is not valid'
                     return 'error'
 
                 pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
@@ -169,6 +171,7 @@ class UnderstandGoal(smach_rcprg.State):
                     assert isinstance(place_name, unicode)
 
         assert isinstance(place_name, unicode)
+
         result = PoseDescription( {'pose':pose, 'place_name':place_name} )
 
         if self.__shutdown__:
@@ -269,6 +272,7 @@ class SayIArrivedTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         self.conversation_interface.addSpeakSentence( u'Dojechalem do {"' + place_name + u'", dopelniacz}' )
+        #rospy.sleep(5.0)
 
         if self.__shutdown__:
             return 'shutdown'
@@ -405,6 +409,8 @@ class MoveTo(smach_rcprg.State):
                 loop_time_s = loop_time.secs
 
                 if self.__shutdown__:
+                    client.cancel_all_goals()
+                    self.service_preempt()
                     return 'shutdown'
 
                 if loop_time_s > NAVIGATION_MAX_TIME_S:

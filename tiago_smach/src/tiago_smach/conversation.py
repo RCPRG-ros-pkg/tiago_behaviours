@@ -8,6 +8,7 @@ import smach
 import smach_ros
 
 from std_msgs.msg import String
+from tiago_msgs.msg import Command
 
 import smach_rcprg
 
@@ -20,8 +21,14 @@ class HearState(smach_rcprg.State):
         smach_rcprg.State.__init__(self, output_keys=[],
                                     outcomes=['preemption', 'should_speak', 'error', 'shutdown'])
         self.conversation_interface = conversation_interface
-        self.__items__ = set()
-        self.__items_lock__ = threading.Lock()
+        self.__intent_list__ = set()
+        self.__intent_list_lock__ = threading.Lock()
+
+        self.sub = rospy.Subscriber("rico_cmd", Command, self.callback)
+
+    def callback(self, data):
+        # data is of type tiago_msgs.msg.Command, i.e. it encapsulates an intent
+        self.add(data)
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -35,19 +42,23 @@ class HearState(smach_rcprg.State):
                 print 'HearState: preemption'
                 return 'preemption'
 
-            self.__items_lock__.acquire()
-            unknown_items = self.conversation_interface.processItems( self.__items__ )
+            self.__intent_list_lock__.acquire()
+            unknown_items = self.conversation_interface.processIntents( self.__intent_list__ )
 
             if unknown_items:
                 print 'unknown_items: ', unknown_items
                 self.conversation_interface.addSpeakSentence(u'Nie rozumiem pytania')
 
             # TODO: react to unknown items
-            self.__items__ = set()
-            self.__items_lock__.release()
+            self.__intent_list__ = set()
+            self.__intent_list_lock__.release()
 
             if self.conversation_interface.hasSpeakSentence():
                 return 'should_speak'
+
+            if self.conversation_interface.isShutdown():
+                print 'HearState preemption'
+                return 'preemption'
 
             try:
                 rospy.sleep(0.1)
@@ -57,9 +68,9 @@ class HearState(smach_rcprg.State):
         raise Exception('Unreachable code')
 
     def add(self, item):
-        self.__items_lock__.acquire()
-        self.__items__.add( item )
-        self.__items_lock__.release()
+        self.__intent_list_lock__.acquire()
+        self.__intent_list__.add( item )
+        self.__intent_list_lock__.release()
 
 class SpeakState(smach_rcprg.State):
     def __init__(self, conversation_interface):
@@ -87,6 +98,12 @@ class SpeakState(smach_rcprg.State):
 
             # TODO: use ROS action to speak the sentences (with waiting for finish)
             self.rico_says_pub.publish( sentence )
+            print 'Rico says: "' + sentence + '"'
+            rospy.sleep(1.0)
+
+            if self.conversation_interface.isShutdown() and not self.conversation_interface.hasSpeakSentence():
+                print 'SpeakState preemption'
+                return 'preemption'
 
             try:
                 rospy.sleep(0.1)
@@ -95,10 +112,10 @@ class SpeakState(smach_rcprg.State):
 
         return 'ok'
 
-    def add(self, item):
-        self.__items_lock__.acquire()
-        self.__items__.add( item )
-        self.__items_lock__.release()
+#    def add(self, item):
+#        self.__items_lock__.acquire()
+#        self.__items__.add( item )
+#        self.__items_lock__.release()
 
 class ConversationSM(smach_rcprg.StateMachine):
     def __init__(self, conversation_interface):
@@ -124,6 +141,7 @@ class ConversationSM(smach_rcprg.StateMachine):
                                         'shutdown':'shutdown'},
                                     remapping={ })
 
+'''
     def updateAction(self, action_name, sm_goal):
         print 'ConversationSM.updateAction ' + action_name
         self.get_children()['Hear'].add( action_name )
@@ -136,6 +154,7 @@ class ConversationSM(smach_rcprg.StateMachine):
             return
 
         self.get_children()['Hear'].add( task.getName() )
+'''
 
 class ConversationInterface:
     def __init__(self):
@@ -144,6 +163,9 @@ class ConversationInterface:
         self.__autoremove_dict__ = {}
         self.__mutex__ = threading.Lock()
         self.__speak_list__ = []
+
+        self.__shutdown__ = False
+        self.__item_types__ = []
 
     def addExpected( self, expected, autoremove ):
         self.__mutex__.acquire()
@@ -163,16 +185,17 @@ class ConversationInterface:
         finally:
             self.__mutex__.release()
 
-    def processItems(self, items):
+    def processIntents(self, intent_list):
         self.__mutex__.acquire()
         unknown_items = set()
-        for item in items:
-            if item in self.__expected_items__:
-                self.__items__.add(item)
-                if self.__autoremove_dict__[item]:
-                    self.__expected_items__.remove(item)
+        for intent in intent_list:
+            name = self.getNameForIntent(intent.intent_name)
+            if name in self.__expected_items__:
+                self.__items__.add(name)
+                if self.__autoremove_dict__[name]:
+                    self.__expected_items__.remove(name)
             else:
-                unknown_items.add(item)
+                unknown_items.add(name)
         self.__mutex__.release()
         return unknown_items
 
@@ -208,3 +231,33 @@ class ConversationInterface:
             sentence = None
         self.__mutex__.release()
         return sentence
+
+    def hasSpeakSentence(self):
+        self.__mutex__.acquire()
+        if self.__speak_list__:
+            has_sentence = True
+        else:
+            has_sentence = False
+        self.__mutex__.release()
+        return has_sentence
+
+    def setShutdown(self):
+        self.__shutdown__ = True
+
+    def isShutdown(self):
+        return self.__shutdown__
+
+    def addItemType(self, name, intent_name):
+        self.__item_types__.append( (name, intent_name) )
+
+    def getNameForIntent(self, intent_name):
+        for name, in_name in self.__item_types__:
+            if in_name == intent_name:
+                return name
+        return None
+
+    def getIntentForName(self, intent_name):
+        for nn, in_name in self.__item_types__:
+            if nn == name:
+                return in_name
+        return None

@@ -6,6 +6,7 @@ import sys
 import subprocess
 
 import rospy
+from std_msgs.msg import String
 from tiago_msgs.msg import Command
 
 class TaskSpec:
@@ -27,6 +28,7 @@ class TaskHarmonizer:
 
         self.current_subprocess = None
         self.current_task = None
+        self.current_task_cmd = None
 
     def hasTaskSpecByIntent(self, intent_name):
         for task_spec in self.tasks_spec_list:
@@ -68,8 +70,7 @@ class TaskHarmonizer:
         while not rospy.is_shutdown():
             if not self.pending_task_request is None:
                 if self.canRunTask( self.pending_task_request[0] ):
-                    if not self.current_subprocess is None:
-                        self.current_subprocess.kill()
+                    self.abortCurrentTask()
                     self.runTask( self.pending_task_request[0], self.pending_task_request[1] )
                 else:
                     print 'Cannot run task "' + self.pending_task_request[0].task_name + '"'
@@ -81,6 +82,32 @@ class TaskHarmonizer:
                     self.current_subprocess = None
                     self.current_task = None
             rospy.sleep(0.1)
+
+    def abortCurrentTask(self):
+        if self.current_subprocess is None:
+            return
+
+        # Send a gentle request
+        self.current_task_cmd.publish('abort')
+
+        time1 = rospy.get_rostime()
+        while not rospy.is_shutdown():
+            if self.current_subprocess is None:
+                break
+
+            if not self.current_subprocess.poll() is None:
+                print 'Task "' + self.current_task[0].task_name + '" has finished'
+                break
+
+            time2 = rospy.get_rostime()
+            if (time2-time1).to_sec() > 5.0:
+                self.current_subprocess.kill()
+                print 'Task "' + self.current_task[0].task_name + '" was killed'
+                break
+
+        self.current_subprocess = None
+        self.current_task = None
+        self.current_task_cmd = None
 
     def canRunTask(self, task_spec):
         return self.current_task is None or task_spec.priority > self.current_task[0].priority
@@ -94,6 +121,7 @@ class TaskHarmonizer:
         print 'args:', args
         self.current_subprocess = subprocess.Popen( args )
         self.current_task = (task_spec, task_parameters)
+        self.current_task_cmd = rospy.Publisher('/' + task_spec.task_name + '/task_state_cmd', String, queue_size=10)
         rospy.sleep(0.1)
 
 def main():
