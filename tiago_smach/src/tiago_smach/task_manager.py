@@ -87,6 +87,7 @@ class TaskUniversal:
 
 class TaskManager:
     def __init__(self, callback_list):
+        raise Exception('Do not use this class')
         self.__callback_list__ = callback_list
         self.o = ro.OdmianaRzeczownikow()
         rospy.Subscriber("rico_cmd", Command, self.callback)

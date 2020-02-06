@@ -45,9 +45,14 @@ class HearState(smach_rcprg.State):
             self.__intent_list_lock__.acquire()
             unknown_items = self.conversation_interface.processIntents( self.__intent_list__ )
 
-            if unknown_items:
-                print 'unknown_items: ', unknown_items
-                self.conversation_interface.addSpeakSentence(u'Nie rozumiem pytania')
+            #if unknown_items:
+            #    print 'unknown_items: ', unknown_items
+            #    #self.conversation_interface.addSpeakSentence(u'Nie rozumiem pytania')
+            #    print 'HearState: nie rozumiem pytania: ', unknown_items
+            for name in unknown_items:
+                answers = self.conversation_interface.getAutomaticAnswers(name)
+                for text in answers:
+                    self.conversation_interface.addSpeakSentence(text)
 
             # TODO: react to unknown items
             self.__intent_list__ = set()
@@ -68,6 +73,7 @@ class HearState(smach_rcprg.State):
         raise Exception('Unreachable code')
 
     def add(self, item):
+        assert isinstance(item, Command)
         self.__intent_list_lock__.acquire()
         self.__intent_list__.add( item )
         self.__intent_list_lock__.release()
@@ -141,21 +147,6 @@ class ConversationSM(smach_rcprg.StateMachine):
                                         'shutdown':'shutdown'},
                                     remapping={ })
 
-'''
-    def updateAction(self, action_name, sm_goal):
-        print 'ConversationSM.updateAction ' + action_name
-        self.get_children()['Hear'].add( action_name )
-
-    def newTaskCallback(self, task):
-        print 'ConversationSM.newTaskCallback( "' + task.getName() + '")'
-
-        if not task.getName() in ['q_load', 'q_current_task', 'ack', 'ack_i_gave', 'ack_i_took']:
-            # Do nothing
-            return
-
-        self.get_children()['Hear'].add( task.getName() )
-'''
-
 class ConversationInterface:
     def __init__(self):
         self.__expected_items__ = set()
@@ -166,6 +157,10 @@ class ConversationInterface:
 
         self.__shutdown__ = False
         self.__item_types__ = []
+
+        self.__automatic_answers_id_map__ = {}
+        self.__automatic_answers_name_map__ = {}
+        self.__automatic_answer_id__ = 0
 
     def addExpected( self, expected, autoremove ):
         self.__mutex__.acquire()
@@ -188,7 +183,10 @@ class ConversationInterface:
     def processIntents(self, intent_list):
         self.__mutex__.acquire()
         unknown_items = set()
+        #print 'processIntents'
         for intent in intent_list:
+            assert isinstance(intent, Command)
+            #print '   ', intent.intent_name
             name = self.getNameForIntent(intent.intent_name)
             if name in self.__expected_items__:
                 self.__items__.add(name)
@@ -247,7 +245,14 @@ class ConversationInterface:
     def isShutdown(self):
         return self.__shutdown__
 
+    def hasItemTypeName(self, n):
+        for name, intent_name in self.__item_types__:
+            if name == n:
+                return True
+        return False
+
     def addItemType(self, name, intent_name):
+        assert not self.hasItemTypeName(name) 
         self.__item_types__.append( (name, intent_name) )
 
     def getNameForIntent(self, intent_name):
@@ -256,8 +261,31 @@ class ConversationInterface:
                 return name
         return None
 
-    def getIntentForName(self, intent_name):
+    def getIntentForName(self, name):
         for nn, in_name in self.__item_types__:
             if nn == name:
                 return in_name
         return None
+
+    def setAutomaticAnswer(self, name, text):
+        assert isinstance(text, unicode)
+        self.__automatic_answers_id_map__[self.__automatic_answer_id__] = (name, text)
+        if not name in self.__automatic_answers_name_map__:
+            self.__automatic_answers_name_map__[name] = {}
+        self.__automatic_answers_name_map__[name][self.__automatic_answer_id__] = text
+        self.__automatic_answer_id__ = self.__automatic_answer_id__ + 1
+        return self.__automatic_answer_id__-1
+
+    def removeAutomaticAnswer(self, answer_id):
+        assert isinstance(answer_id, (int, long))
+        name, text = self.__automatic_answers_id_map__[answer_id]
+        del self.__automatic_answers_name_map__[name][answer_id]
+        del self.__automatic_answers_id_map__[answer_id]
+
+    def getAutomaticAnswers(self, name):
+        if not name in self.__automatic_answers_name_map__:
+            return []
+        result = []
+        for answear_id, text in self.__automatic_answers_name_map__[name].iteritems():
+            result.append(text)
+        return result

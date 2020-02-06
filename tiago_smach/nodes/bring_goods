@@ -94,7 +94,7 @@ class MainSM(smach.Concurrence):
         conversation_interface = tiago_smach.conversation.ConversationInterface()
         # The 'stop' command is valid in every situation, so do not autoremove it.
         #conversation_interface.addExpected( 'stop', False )
-        
+
         conversation_interface.addItemType('ack',           'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1')
         conversation_interface.addItemType('ack_i_took',    'projects/incare-dialog-agent/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b')
         conversation_interface.addItemType('ack_i_gave',    'projects/incare-dialog-agent/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629')

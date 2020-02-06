@@ -5,9 +5,37 @@ import rospkg
 import sys
 import subprocess
 
+import rosgraph
 import rospy
 from std_msgs.msg import String
 from tiago_msgs.msg import Command
+
+ID = '/rosnode'
+def get_node_names(namespace=None):
+    """
+    @param namespace: optional namespace to scope return values by. Namespace must already be resolved.
+    @type  namespace: str
+    @return: list of node caller IDs
+    @rtype: [str]
+    @raise ROSNodeIOException: if unable to communicate with master
+    """
+    master = rosgraph.Master(ID)
+    try:
+        state = master.getSystemState()
+    except socket.error:
+        raise ROSNodeIOException("Unable to communicate with master!")
+    nodes = []
+    if namespace:
+        # canonicalize namespace with leading/trailing slash
+        g_ns = rosgraph.names.make_global_ns(namespace)
+        for s in state:
+            for t, l in s:
+                nodes.extend([n for n in l if n.startswith(g_ns) or n == namespace])
+    else:
+        for s in state:
+            for t, l in s:
+                nodes.extend(l)
+    return list(set(nodes))
 
 class TaskSpec:
     def __init__(self, intent_name, task_name, priority, params_names_list):
@@ -19,6 +47,8 @@ class TaskSpec:
 class TaskHarmonizer:
     def __init__(self, intent_topics, tasks_spec_list, cached_rapps_path):
         self.tasks_spec_list = tasks_spec_list
+        self.checkForDynamicAgentsRunning()
+
         self.sub_list = []
         for topic_name in intent_topics:
             self.sub_list.append( rospy.Subscriber(topic_name, Command, self.callback) )
@@ -113,6 +143,7 @@ class TaskHarmonizer:
         return self.current_task is None or task_spec.priority > self.current_task[0].priority
 
     def runTask(self, task_spec, task_parameters):
+        self.checkForDynamicAgentsRunning()
         print 'Running task "' + task_spec.task_name + '", parameters: ' + str(task_parameters)
         args = [self.cached_rapps_path + '/' + task_spec.task_name]
         for param_name, param_value in task_parameters.iteritems():
@@ -124,9 +155,19 @@ class TaskHarmonizer:
         self.current_task_cmd = rospy.Publisher('/' + task_spec.task_name + '/task_state_cmd', String, queue_size=10)
         rospy.sleep(0.1)
 
+    def checkForDynamicAgentsRunning(self):
+        active_ros_nodes = get_node_names()
+        for task_spec in self.tasks_spec_list:
+            for node_name in active_ros_nodes:
+                if '/' + task_spec.task_name == node_name:
+                    raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
+
 def main():
     rospy.init_node('task_harmonizer_rico')
     rospy.sleep(0.5)
+
+    print 'Currently running nodes:'
+    print get_node_names()
 
     # TODO: read map of intents to tasks from file downloaded from cloud (RAPP Store)
     # intent_name -> (task_name, task_param_names)

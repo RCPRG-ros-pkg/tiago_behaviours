@@ -92,8 +92,7 @@ class MainSM(smach.Concurrence):
 
         # Create conversation interface that is shared between all states and SMs.
         conversation_interface = tiago_smach.conversation.ConversationInterface()
-        # The 'stop' command is valid in every situation, so do not autoremove it.
-        #conversation_interface.addExpected( 'stop', False )
+        conversation_interface.addItemType('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4')
 
         self.behaviour_sm = BehaviourSM( sim_mode, conversation_interface, kb_places, place_name_m )
         self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
