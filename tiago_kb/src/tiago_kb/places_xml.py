@@ -385,7 +385,7 @@ class PlacesXmlParser:
         # <point_place id="fotel" name="fotel" position="-0.64 0.34" front_vec="0 -1" />
         assert xml.tagName == "point_place"
         id_str = xml.getAttribute("id")
-        name_str = xml.getAttribute("name").encode('utf-8').encode('utf-8').decode('utf-8')
+        name_str = xml.getAttribute("name").encode('utf-8').decode('utf-8')
         position_str = xml.getAttribute("position")
         front_vec_str = xml.getAttribute("front_vec")
 

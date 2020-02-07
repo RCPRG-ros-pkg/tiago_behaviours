@@ -88,7 +88,7 @@ class TaskHarmonizer:
         if self.hasTaskSpecByIntent(data.intent_name):
             task_spec = self.getTaskSpecByIntent(data.intent_name)
             if not self.pending_task_request is None:
-                print 'ERROR: pending task request "' + self.pending_task_request[0] + '" was not consumed an ne intent for task "' + task_spec.task_name + '" arrived'
+                print 'ERROR: pending task request "' + str(self.pending_task_request[0]) + '" was not consumed an ne intent for task "' + task_spec.task_name + '" arrived'
             task_param_map = {}
             for param_name in task_spec.params_names_list:
                 if not param_name in param_dict:

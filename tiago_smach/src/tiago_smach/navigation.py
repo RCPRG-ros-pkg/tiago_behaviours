@@ -158,8 +158,17 @@ class UnderstandGoal(smach_rcprg.State):
                     print 'UnderstandGoal place_name is not valid'
                     return 'error'
 
-                pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
-                pose = makePose(pt_dest[0], pt_dest[1], 0.0)
+                if pl.getType() == 'point':
+                    pt_dest = pl.getPt()
+                    norm = pl.getN()
+                    angle_dest = math.atan2(-norm[1], -norm[0])
+                    pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
+                elif pl.getType() == 'volumetric':
+                    pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
+                    angle_dest = 0.0
+                else:
+                    raise Exception('Unknown place type: "' + pl.getType() + '"')
+                pose = makePose(pt_dest[0], pt_dest[1], angle_dest)
             else:
                 place_pos = (pose.position.x, pose.position.y)
                 result_place_id = self.kb_places.whatIsAt(place_pos, mc_name)
