@@ -15,8 +15,6 @@ from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 
-from tiago_behaviours_msgs.msg import MoveToGoal
-
 import navigation
 import smach_rcprg
 
