@@ -19,8 +19,6 @@ import std_srvs.srv as std_srvs
 from tf.transformations import quaternion_from_euler
 import pl_nouns.odmiana as ro
 
-from tiago_behaviours_msgs.msg import MoveToGoal
-
 import smach_rcprg
 import tiago_torso_controller
 from task_manager import PoseDescription
@@ -74,10 +72,6 @@ class RememberCurrentPose(smach_rcprg.State):
                 self.__lock__.acquire()
                 if not self.current_pose is None:
                     pose_valid = True
-                    #goal_pose = MoveToGoal()
-                    #goal_pose.pose = self.current_pose.pose.pose
-                    #goal_pose.pose_valid = True
-                    #goal_pose.place_name_valid = False
                     userdata.current_pose = PoseDescription( {'pose':self.current_pose.pose.pose} )
                 self.__lock__.release()
 
