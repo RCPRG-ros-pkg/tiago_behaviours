@@ -391,6 +391,8 @@ class PlacesXmlParser:
 
         pos = parsePointStr( position_str )
         vec_n = parsePointStr( front_vec_str )
+        vec_n_len = math.sqrt(vec_n[0]**2 + vec_n[1]**2)
+        vec_n = (vec_n[0]/vec_n_len, vec_n[1]/vec_n_len)
         mc.addPointPlace(id_str, name_str, pos, vec_n)
 
     def parseMapTransform(self, xml):
