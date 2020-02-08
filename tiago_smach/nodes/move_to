@@ -17,8 +17,7 @@ import tiago_kb.places_xml as kb_p
 
 from tiago_smach.task_manager import PoseDescription
 
-import pl_nouns.odmiana as ro
-
+from pl_nouns.dictionary_client import DisctionaryServiceClient
 
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface):
@@ -93,8 +92,14 @@ class MainSM(smach.Concurrence):
         t2 = time.time()
         print 'reading KB for places took', (t2-t1)
 
-        dictionary = ro.OdmianaRzeczownikow()
-        place_name_m, place_name_d, place_name_b = dictionary.przypadki(place_name)
+        dictionary = DisctionaryServiceClient()
+        #dictionary = ro.OdmianaRzeczownikow()
+        #place_name_m, place_name_d, place_name_b = dictionary.przypadki(place_name)
+        place_name_m = dictionary.getCases(place_name).getCase('mianownik')
+
+        # Tests:
+        #print dictionary.getCases(u'łazienkę').getCase('mianownik')
+        #print dictionary.getCases(u'szczoteczką').getCase('mianownik')
 
         t3 = time.time()
         print 'reading Dictionary took', (t3-t2)

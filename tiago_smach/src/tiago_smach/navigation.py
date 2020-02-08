@@ -237,7 +237,7 @@ class SayImGoingTo(smach_rcprg.State):
 
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
-        self.conversation_interface.speakNowBlocking( u'Jadę do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla jadę do {"' + place_name + u'", dopelniacz}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -257,7 +257,7 @@ class SayIdontKnow(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
-        self.conversation_interface.speakNowBlocking( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
+        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -278,7 +278,7 @@ class SayIArrivedTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
-        self.conversation_interface.speakNowBlocking( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla dojechałem do {"' + place_name + u'", dopelniacz}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -371,13 +371,13 @@ class MoveTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Jadę do {"' + place_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'odpowiedz blabla jadę do {"' + place_name + u'", dopelniacz}' )
 
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
 
         if self.sim_mode == 'sim':
-            for i in range(100):
+            for i in range(50):
                 if self.preempt_requested():
                     self.conversation_interface.removeAutomaticAnswer(answer_id)
                     self.service_preempt()

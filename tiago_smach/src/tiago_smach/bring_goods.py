@@ -48,12 +48,12 @@ class SayAskForGoods(smach_rcprg.State):
         goods_name = userdata.goods_name
 
         #self.conversation_interface.addSpeakSentence( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
-        self.conversation_interface.speakNowBlocking( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
+        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
         self.conversation_interface.addExpected('ack')
         self.conversation_interface.addExpected('ack_i_gave')
 
-        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na położenie {"' + goods_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'odpowiedz blabla czekam na położenie {"' + goods_name + u'", dopelniacz}' )
 
         userdata.q_load_answer_id = None
 
@@ -85,7 +85,7 @@ class SayAskForGoods(smach_rcprg.State):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_gave')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
-                answer_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'Wiozę {"' + goods_name + u'", biernik}' )
+                answer_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'odpowiedz blabla wiozę {"' + goods_name + u'", biernik}' )
                 userdata.q_load_answer_id = answer_id
                 return 'ok'
 
@@ -108,12 +108,12 @@ class SayTakeGoods(smach_rcprg.State):
         goods_name = userdata.goods_name
 
         #self.conversation_interface.addSpeakSentence( u'Odbierz {"' + goods_name + u'", biernik} i potwierdź' )
-        self.conversation_interface.speakNowBlocking( u'Odbierz {"' + goods_name + u'", biernik} i potwierdź' )
+        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla odbierz {"' + goods_name + u'", biernik} i potwierdź' )
 
         self.conversation_interface.addExpected('ack')
         self.conversation_interface.addExpected('ack_i_took')
 
-        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na odebranie {"' + goods_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'odpowiedz blabla czekam na odebranie {"' + goods_name + u'", dopelniacz}' )
 
         start_time = rospy.Time.now()
         while True:

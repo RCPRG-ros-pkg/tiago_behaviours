@@ -16,8 +16,7 @@ import tiago_kb.places_xml as kb_p
 
 from tiago_smach.task_manager import PoseDescription
 
-import pl_nouns.odmiana as ro
-
+from pl_nouns.dictionary_client import DisctionaryServiceClient
 
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface):
@@ -88,8 +87,11 @@ class MainSM(smach.Concurrence):
             goods_name = goods_name.decode('utf-8')
         goods_name = goods_name.encode('utf-8').decode('utf-8')
 
-        dictionary = ro.OdmianaRzeczownikow()
-        goods_name_m, goods_name_d, goods_name_b = dictionary.przypadki(goods_name)
+        #dictionary = ro.OdmianaRzeczownikow()
+        #goods_name_m, goods_name_d, goods_name_b = dictionary.przypadki(goods_name)
+        dictionary = DisctionaryServiceClient()
+        goods_name_m = dictionary.getCases(goods_name).getCase('mianownik')
+
 
         # Create conversation interface that is shared between all states and SMs.
         #conversation_interface = tiago_smach.conversation.ConversationInterface()
