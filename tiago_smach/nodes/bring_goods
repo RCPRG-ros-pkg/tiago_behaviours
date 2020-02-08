@@ -86,6 +86,7 @@ class MainSM(smach.Concurrence):
 
         if isinstance(goods_name, str):
             goods_name = goods_name.decode('utf-8')
+        goods_name = goods_name.encode('utf-8').decode('utf-8')
 
         dictionary = ro.OdmianaRzeczownikow()
         goods_name_m, goods_name_d, goods_name_b = dictionary.przypadki(goods_name)

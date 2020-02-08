@@ -111,7 +111,7 @@ class SayTakeGoods(smach_rcprg.State):
         self.conversation_interface.addExpected('ack', True)
         self.conversation_interface.addExpected('ack_i_took', True)
 
-        answear_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na odebranie {"' + str(goods_name) + u'", dopelniacz}' )
+        answear_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na odebranie {"' + goods_name + u'", dopelniacz}' )
 
         start_time = rospy.Time.now()
         while True:

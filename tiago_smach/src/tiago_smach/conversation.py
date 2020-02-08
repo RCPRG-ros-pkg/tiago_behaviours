@@ -230,14 +230,14 @@ class ConversationInterface:
         self.__mutex__.release()
         return sentence
 
-    def hasSpeakSentence(self):
-        self.__mutex__.acquire()
-        if self.__speak_list__:
-            has_sentence = True
-        else:
-            has_sentence = False
-        self.__mutex__.release()
-        return has_sentence
+    #def hasSpeakSentence(self):
+    #    self.__mutex__.acquire()
+    #    if self.__speak_list__:
+    #        has_sentence = True
+    #    else:
+    #        has_sentence = False
+    #    self.__mutex__.release()
+    #    return has_sentence
 
     def setShutdown(self):
         self.__shutdown__ = True

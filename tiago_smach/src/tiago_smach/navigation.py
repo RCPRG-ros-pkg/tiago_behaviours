@@ -276,12 +276,12 @@ class SayIArrivedTo(smach_rcprg.State):
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
-        self.conversation_interface.addSpeakSentence( u'Dojechalem do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.addSpeakSentence( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
         rospy.sleep(2.0)
 
         if self.__shutdown__:
             return 'shutdown'
-        #self.conversation_interface.addSpeakSentence( 'Dojechalem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
+        #self.conversation_interface.addSpeakSentence( 'Dojechałem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
         return 'ok'
 
 class SetNavParams(smach_rcprg.State):
