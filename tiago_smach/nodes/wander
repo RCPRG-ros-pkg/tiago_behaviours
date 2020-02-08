@@ -28,7 +28,8 @@ class Cleanup(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Cleanup.execute'
-        self.conversation_interface.setShutdown()
+        #self.conversation_interface.setShutdown()
+        self.conversation_interface.stop()
         return 'ok'
 
 #
@@ -72,20 +73,25 @@ class MainSM(smach.Concurrence):
         kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
         # Create conversation interface that is shared between all states and SMs.
-        conversation_interface = tiago_smach.conversation.ConversationInterface()
-        conversation_interface.addItemType('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4')
+        #conversation_interface = tiago_smach.conversation.ConversationInterface()
+        #conversation_interface.addItemType('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4')
+        self.conversation_interface = tiago_smach.conversation.ConversationMachine([
+                ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
+            ])
+        self.conversation_interface.start()
 
-        self.behaviour_sm = BehaviourSM( sim_mode, conversation_interface, kb_places )
-        self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
+        self.behaviour_sm = BehaviourSM( sim_mode, self.conversation_interface, kb_places )
+        #self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
 
         with self:
             # Add states to the container
             smach.Concurrence.add('task', self.behaviour_sm)
-            smach.Concurrence.add('conv', self.conversation_sm)
+            #smach.Concurrence.add('conv', self.conversation_sm)
 
     def shutdownRequest(self):
         self.behaviour_sm.shutdownRequest()
-        self.conversation_sm.shutdownRequest()
+        #self.conversation_sm.shutdownRequest()
+        self.conversation_interface.stop()
         self.request_preempt()
 
 def main():

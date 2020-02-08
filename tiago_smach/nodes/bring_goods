@@ -28,7 +28,7 @@ class Cleanup(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Cleanup.execute'
-        self.conversation_interface.setShutdown()
+        self.conversation_interface.stop()
         return 'ok'
 
 #
@@ -92,27 +92,34 @@ class MainSM(smach.Concurrence):
         goods_name_m, goods_name_d, goods_name_b = dictionary.przypadki(goods_name)
 
         # Create conversation interface that is shared between all states and SMs.
-        conversation_interface = tiago_smach.conversation.ConversationInterface()
-        # The 'stop' command is valid in every situation, so do not autoremove it.
-        #conversation_interface.addExpected( 'stop', False )
+        #conversation_interface = tiago_smach.conversation.ConversationInterface()
+        #conversation_interface.addItemType('ack',           'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1')
+        #conversation_interface.addItemType('ack_i_took',    'projects/incare-dialog-agent/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b')
+        #conversation_interface.addItemType('ack_i_gave',    'projects/incare-dialog-agent/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629')
+        #conversation_interface.addItemType('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4')
+        #conversation_interface.addItemType('q_load',        'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507')
 
-        conversation_interface.addItemType('ack',           'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1')
-        conversation_interface.addItemType('ack_i_took',    'projects/incare-dialog-agent/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b')
-        conversation_interface.addItemType('ack_i_gave',    'projects/incare-dialog-agent/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629')
-        conversation_interface.addItemType('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4')
-        conversation_interface.addItemType('q_load',        'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507')
+        self.conversation_interface = tiago_smach.conversation.ConversationMachine([
+                ('ack',           'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
+                ('ack_i_took',    'projects/incare-dialog-agent/agent/intents/181621b6-e91e-4244-a925-c5dc32ee1f1b'),
+                ('ack_i_gave',    'projects/incare-dialog-agent/agent/intents/d017cbd0-93f8-45b2-996e-043cdccab629'),
+                ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
+                ('q_load',        'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
+            ])
+        self.conversation_interface.start()
 
-        self.behaviour_sm = BehaviourSM( sim_mode, conversation_interface, kb_places, goods_name_m )
-        self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
+        self.behaviour_sm = BehaviourSM( sim_mode, self.conversation_interface, kb_places, goods_name_m )
+        #self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
 
         with self:
             # Add states to the container
             smach.Concurrence.add('task', self.behaviour_sm)
-            smach.Concurrence.add('conv', self.conversation_sm)
+            #smach.Concurrence.add('conv', self.conversation_sm)
 
     def shutdownRequest(self):
+        self.conversation_interface.stop()
         self.behaviour_sm.shutdownRequest()
-        self.conversation_sm.shutdownRequest()
+        #self.conversation_sm.shutdownRequest()
         self.request_preempt()
 
 def main():

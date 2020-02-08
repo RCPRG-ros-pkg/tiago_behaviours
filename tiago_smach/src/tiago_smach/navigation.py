@@ -209,12 +209,13 @@ class SetHeight(smach_rcprg.State):
             self.torso_controller.set_torso_height(userdata.torso_height)
             for i in range(30):
                 if self.preempt_requested():
-                    self.conversation_interface.removeExpected('q_current_task')
+                    #self.conversation_interface.removeExpected('q_current_task')
                     self.service_preempt()
                     return 'preemption'
 
-                if self.conversation_interface.consumeItem('q_current_task'):
-                    self.conversation_interface.addSpeakSentence( u'Zmieniam wysokość.' )
+                #if self.conversation_interface.consumeExpected('q_current_task'):
+                #    #self.conversation_interface.addSpeakSentence( u'Zmieniam wysokość.' )
+                #    self.conversation_interface.speakNowBlocking( u'Zmieniam wysokość.' )
                 rospy.sleep(0.1)
 
         if self.__shutdown__:
@@ -235,8 +236,8 @@ class SayImGoingTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
-        rospy.sleep(2.0)
+        #self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'Jadę do {"' + place_name + u'", dopelniacz}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -255,8 +256,8 @@ class SayIdontKnow(smach_rcprg.State):
 
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
-        self.conversation_interface.addSpeakSentence( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
-        rospy.sleep(2.0)
+        #self.conversation_interface.addSpeakSentence( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
+        self.conversation_interface.speakNowBlocking( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -276,8 +277,8 @@ class SayIArrivedTo(smach_rcprg.State):
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
-        self.conversation_interface.addSpeakSentence( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
-        rospy.sleep(2.0)
+        #self.conversation_interface.addSpeakSentence( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
 
         if self.__shutdown__:
             return 'shutdown'

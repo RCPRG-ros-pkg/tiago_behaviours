@@ -47,10 +47,11 @@ class SayAskForGoods(smach_rcprg.State):
 
         goods_name = userdata.goods_name
 
-        self.conversation_interface.addSpeakSentence( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
+        #self.conversation_interface.addSpeakSentence( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
+        self.conversation_interface.speakNowBlocking( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
-        self.conversation_interface.addExpected('ack', True)
-        self.conversation_interface.addExpected('ack_i_gave', True)
+        self.conversation_interface.addExpected('ack')
+        self.conversation_interface.addExpected('ack_i_gave')
 
         answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na położenie {"' + goods_name + u'", dopelniacz}' )
 
@@ -79,8 +80,8 @@ class SayAskForGoods(smach_rcprg.State):
                 self.service_preempt()
                 return 'preemption'
 
-            if self.conversation_interface.consumeItem('ack') or\
-                    self.conversation_interface.consumeItem('ack_i_gave'):
+            if self.conversation_interface.consumeExpected('ack') or\
+                    self.conversation_interface.consumeExpected('ack_i_gave'):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_gave')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
@@ -106,10 +107,11 @@ class SayTakeGoods(smach_rcprg.State):
 
         goods_name = userdata.goods_name
 
-        self.conversation_interface.addSpeakSentence( u'Odbierz {"' + goods_name + u'", biernik} i potwierdź' )
+        #self.conversation_interface.addSpeakSentence( u'Odbierz {"' + goods_name + u'", biernik} i potwierdź' )
+        self.conversation_interface.speakNowBlocking( u'Odbierz {"' + goods_name + u'", biernik} i potwierdź' )
 
-        self.conversation_interface.addExpected('ack', True)
-        self.conversation_interface.addExpected('ack_i_took', True)
+        self.conversation_interface.addExpected('ack')
+        self.conversation_interface.addExpected('ack_i_took')
 
         answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na odebranie {"' + goods_name + u'", dopelniacz}' )
 
@@ -138,8 +140,8 @@ class SayTakeGoods(smach_rcprg.State):
                 self.service_preempt()
                 return 'preemption'
 
-            if self.conversation_interface.consumeItem('ack') or\
-                    self.conversation_interface.consumeItem('ack_i_took'):
+            if self.conversation_interface.consumeExpected('ack') or\
+                    self.conversation_interface.consumeExpected('ack_i_took'):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_took')
                 self.conversation_interface.removeAutomaticAnswer(answer_id)
@@ -160,7 +162,8 @@ class SayIFinished(smach_rcprg.State):
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.conversation_interface.speakNowBlocking( u'Zakończyłem zadanie' )
 
         if self.__shutdown__:
             return 'shutdown'

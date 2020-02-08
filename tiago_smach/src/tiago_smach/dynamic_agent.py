@@ -35,13 +35,13 @@ class SmachShutdownManager:
         print 'SmachShutdownManager.on_shutdown: stopping the main SM'
         self.__main_sm__.request_preempt()
 
-        rospy.sleep(2.0)
+        #rospy.sleep(2.0)
 
 class DynAgent:
     def __init__(self, name):
         self.name = name
         rospy.init_node(self.name)
-        rospy.sleep(0.5)
+        rospy.sleep(0.1)
         self.sub_task_state_cmd = rospy.Subscriber('/' + self.name + '/task_state_cmd', String, self.callbackTaskStateCmd)
         self.finished = False
 
@@ -87,4 +87,4 @@ class DynAgent:
                 self.finished = True
                 self.main_sm.shutdownRequest()
                 break
-            time.sleep(1.0)
+            time.sleep(0.2)
