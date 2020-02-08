@@ -126,8 +126,7 @@ class SayTakeGoods(smach_rcprg.State):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_took')
                 self.conversation_interface.removeAutomaticAnswer(answear_id)
-                if not userdata.q_load_answear_id is None:
-                    self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answear_id)
+                # Do not remove q_load_answear, because we want to enter this state again
                 return 'timeout'
 
             if self.preempt_requested():
