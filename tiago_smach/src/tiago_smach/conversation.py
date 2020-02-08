@@ -12,6 +12,9 @@ from tiago_msgs.msg import Command
 
 import smach_rcprg
 
+import actionlib
+import tiago_msgs.msg
+
 #
 # The SM that govenrs the highest-level conversation.
 #
@@ -83,7 +86,11 @@ class SpeakState(smach_rcprg.State):
         smach_rcprg.State.__init__(self, output_keys=[],
                                     outcomes=['ok', 'preemption', 'error', 'shutdown'])
         self.conversation_interface = conversation_interface
-        self.rico_says_pub = rospy.Publisher('rico_says', String, queue_size=10)
+
+        print 'SpeakState.__init__: waiting for rico_says ActionServer...'
+        self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
+        self.rico_says_client.wait_for_server()
+        print 'SpeakState.__init__: connected to rico_says ActionServer'
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -103,9 +110,13 @@ class SpeakState(smach_rcprg.State):
                 break
 
             # TODO: use ROS action to speak the sentences (with waiting for finish)
-            self.rico_says_pub.publish( sentence )
             print 'Rico says: "' + sentence + '"'
-            rospy.sleep(1.0)
+            goal = tiago_msgs.msg.SaySentenceGoal()
+            goal.sentence = sentence
+            self.rico_says_client.send_goal(goal)
+            self.rico_says_client.wait_for_result()
+            #self.rico_says_client.get_result()
+
 
             if self.conversation_interface.isShutdown() and not self.conversation_interface.hasSpeakSentence():
                 print 'SpeakState preemption'
@@ -117,11 +128,6 @@ class SpeakState(smach_rcprg.State):
                 return 'error'
 
         return 'ok'
-
-#    def add(self, item):
-#        self.__items_lock__.acquire()
-#        self.__items__.add( item )
-#        self.__items_lock__.release()
 
 class ConversationSM(smach_rcprg.StateMachine):
     def __init__(self, conversation_interface):
@@ -229,15 +235,6 @@ class ConversationInterface:
             sentence = None
         self.__mutex__.release()
         return sentence
-
-    #def hasSpeakSentence(self):
-    #    self.__mutex__.acquire()
-    #    if self.__speak_list__:
-    #        has_sentence = True
-    #    else:
-    #        has_sentence = False
-    #    self.__mutex__.release()
-    #    return has_sentence
 
     def setShutdown(self):
         self.__shutdown__ = True
