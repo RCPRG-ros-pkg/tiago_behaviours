@@ -59,6 +59,10 @@ class RememberCurrentPose(smach_rcprg.State):
 
         if self.sim_mode == 'sim':
             userdata.current_pose = PoseDescription( {'pose':makePose(0, 0, 0)} )
+            if self.preempt_requested():
+                self.service_preempt()
+                return 'preemption'
+
             if self.__shutdown__:
                 return 'shutdown'
             return 'ok'
@@ -177,6 +181,10 @@ class UnderstandGoal(smach_rcprg.State):
 
         result = PoseDescription( {'pose':pose, 'place_name':place_name} )
 
+        if self.preempt_requested():
+            self.service_preempt()
+            return 'preemption'
+
         if self.__shutdown__:
             return 'shutdown'
 
@@ -209,7 +217,6 @@ class SetHeight(smach_rcprg.State):
             self.torso_controller.set_torso_height(userdata.torso_height)
             for i in range(30):
                 if self.preempt_requested():
-                    #self.conversation_interface.removeExpected('q_current_task')
                     self.service_preempt()
                     return 'preemption'
 
@@ -237,7 +244,12 @@ class SayImGoingTo(smach_rcprg.State):
 
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Jadę do {"' + place_name + u'", dopelniacz}' )
-        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla jadę do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
+
+        if self.preempt_requested():
+            #self.conversation_interface.removeExpected('q_current_task')
+            self.service_preempt()
+            return 'preemption'
 
         if self.__shutdown__:
             return 'shutdown'
@@ -257,7 +269,12 @@ class SayIdontKnow(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
-        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe nie wiem gdzie jest {"' + place_name + u'", mianownik}' )
+
+        if self.preempt_requested():
+            #self.conversation_interface.removeExpected('q_current_task')
+            self.service_preempt()
+            return 'preemption'
 
         if self.__shutdown__:
             return 'shutdown'
@@ -278,7 +295,11 @@ class SayIArrivedTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
         assert isinstance(place_name, unicode)
         #self.conversation_interface.addSpeakSentence( u'Dojechałem do {"' + place_name + u'", dopelniacz}' )
-        self.conversation_interface.speakNowBlocking( u'odpowiedz blabla dojechałem do {"' + place_name + u'", dopelniacz}' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe dojechałem do {"' + place_name + u'", dopelniacz}' )
+
+        if self.preempt_requested():
+            self.service_preempt()
+            return 'preemption'
 
         if self.__shutdown__:
             return 'shutdown'
@@ -347,6 +368,10 @@ class SetNavParams(smach_rcprg.State):
 
             config = self.dynparam_client.update_configuration(params)
 
+        if self.preempt_requested():
+            self.service_preempt()
+            return 'preemption'
+
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
@@ -371,7 +396,7 @@ class MoveTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'odpowiedz blabla jadę do {"' + place_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe jadę do {"' + place_name + u'", dopelniacz}' )
 
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
@@ -516,6 +541,10 @@ class ClearCostMaps(smach_rcprg.State):
             self.clear_costmaps()
         rospy.sleep(0.5)
 
+        if self.preempt_requested():
+            self.service_preempt()
+            return 'preemption'
+
         if self.__shutdown__:
             return 'shutdown'
         return 'ok'
@@ -526,10 +555,6 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                             input_keys=['goal'])
 
         with self:
-#            smach_rcprg.StateMachine.add('ProcessMoveToCommand', ProcessMoveToCommand(sim_mode),
-#                                    transitions={'ok':'RememberCurrentPose', 'shutdown':'shutdown'},
-#                                    remapping={'goal_task':'goal_task', 'goal_pose':'goal_pose'})
-
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
                                     transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
@@ -571,10 +596,6 @@ class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
         self.userdata.default_height = 0.2
 
         with self:
-#            smach_rcprg.StateMachine.add('ProcessMoveToCommand', ProcessMoveToCommand(sim_mode),
-#                                    transitions={'ok':'RememberCurrentPose', 'shutdown':'shutdown'},
-#                                    remapping={'goal_task':'goal_task', 'goal_pose':'goal_pose'})
-
             smach_rcprg.StateMachine.add('RememberCurrentPose', RememberCurrentPose(sim_mode),
                                     transitions={'ok':'UnderstandGoal', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},

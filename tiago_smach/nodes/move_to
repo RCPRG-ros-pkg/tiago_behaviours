@@ -28,7 +28,6 @@ class Cleanup(smach_rcprg.State):
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Cleanup.execute'
-        #self.conversation_interface.setShutdown()
         self.conversation_interface.stop()
         return 'ok'
 
@@ -36,36 +35,9 @@ class Cleanup(smach_rcprg.State):
 # The SM that govenrs the highest-level behaviour.
 #
 
-class BehaviourSM(smach_rcprg.StateMachine):
-    def __init__(self, sim_mode, conversation_interface, kb_places, place_name):
-        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'])
-
-        self.userdata.goal = PoseDescription({'place_name':place_name})
-
-        with self:
-            smach_rcprg.StateMachine.add('MoveTo',
-                                    tiago_smach.navigation.MoveToComplexTorsoMid(sim_mode, conversation_interface, kb_places),
-                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup',
-                                    'shutdown':'shutdown'},
-                                    remapping={'goal':'goal'})
-
-            smach_rcprg.StateMachine.add('Cleanup',
-                                    Cleanup(conversation_interface),
-                                    transitions={'ok':'Finished', 'shutdown':'shutdown'},
-                                    remapping={ })
-
-#
-#
-#
-
-class MainSM(smach.Concurrence):
+class MainSM(smach_rcprg.StateMachine):
     def __init__(self):
-        smach.Concurrence.__init__(self, outcomes=['PREEMPTED',
-                                                    'FAILED',
-                                                    'FINISHED'],
-                                        default_outcome='FINISHED',
-                                        outcome_map={'FINISHED':
-                                            { 'task':'Finished'}})
+        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'])
 
         t1 = time.time()
         places_xml_filename = rospy.get_param('/kb_places_xml')
@@ -93,8 +65,6 @@ class MainSM(smach.Concurrence):
         print 'reading KB for places took', (t2-t1)
 
         dictionary = DisctionaryServiceClient()
-        #dictionary = ro.OdmianaRzeczownikow()
-        #place_name_m, place_name_d, place_name_b = dictionary.przypadki(place_name)
         place_name_m = dictionary.getCases(place_name).getCase('mianownik')
 
         # Tests:
@@ -104,30 +74,30 @@ class MainSM(smach.Concurrence):
         t3 = time.time()
         print 'reading Dictionary took', (t3-t2)
 
-        # Create conversation interface that is shared between all states and SMs.
-        #conversation_interface = tiago_smach.conversation.ConversationInterface()
-        #conversation_interface.addItemType('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4')
-
         self.conversation_interface = tiago_smach.conversation.ConversationMachine([
                 ('q_current_task', 'projects/incare-dialog-agent/agent/intents/8f45359d-ee47-4e10-a1b2-de3f3223e5b4'),
             ])
         self.conversation_interface.start()
 
-        self.behaviour_sm = BehaviourSM( sim_mode, self.conversation_interface, kb_places, place_name_m )
-        #self.conversation_sm = tiago_smach.conversation.ConversationSM( conversation_interface )
+        self.userdata.goal = PoseDescription({'place_name':place_name_m})
 
         with self:
-            # Add states to the container
-            smach.Concurrence.add('task', self.behaviour_sm)
-            #smach.Concurrence.add('conv', self.conversation_sm)
+            smach_rcprg.StateMachine.add('MoveTo',
+                                    tiago_smach.navigation.MoveToComplexTorsoMid(sim_mode, self.conversation_interface, kb_places),
+                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup',
+                                    'shutdown':'shutdown'},
+                                    remapping={'goal':'goal'})
+
+            smach_rcprg.StateMachine.add('Cleanup',
+                                    Cleanup(self.conversation_interface),
+                                    transitions={'ok':'Finished', 'shutdown':'shutdown'},
+                                    remapping={ })
 
         t4 = time.time()
         print 'starting SMACH took', (t4-t3)
 
     def shutdownRequest(self):
-        self.behaviour_sm.shutdownRequest()
         self.conversation_interface.stop()
-        #self.conversation_sm.shutdownRequest()
         self.request_preempt()
 
 def main():
