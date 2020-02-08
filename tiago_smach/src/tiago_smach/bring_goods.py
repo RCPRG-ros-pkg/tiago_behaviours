@@ -35,7 +35,7 @@ def makePose(x, y, theta):
 
 class SayAskForGoods(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['goods_name'], output_keys=['q_load_answear_id'],
+        smach_rcprg.State.__init__(self, input_keys=['goods_name'], output_keys=['q_load_answer_id'],
                              outcomes=['ok', 'preemption', 'timeout', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -52,9 +52,9 @@ class SayAskForGoods(smach_rcprg.State):
         self.conversation_interface.addExpected('ack', True)
         self.conversation_interface.addExpected('ack_i_gave', True)
 
-        answear_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na położenie {"' + goods_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na położenie {"' + goods_name + u'", dopelniacz}' )
 
-        userdata.q_load_answear_id = None
+        userdata.q_load_answer_id = None
 
         start_time = rospy.Time.now()
         while True:
@@ -63,19 +63,19 @@ class SayAskForGoods(smach_rcprg.State):
             loop_time_s = loop_time.secs
 
             if self.__shutdown__:
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
                 return 'shutdown'
 
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
                 return 'timeout'
 
             if self.preempt_requested():
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
                 self.service_preempt()
                 return 'preemption'
 
@@ -83,9 +83,9 @@ class SayAskForGoods(smach_rcprg.State):
                     self.conversation_interface.consumeItem('ack_i_gave'):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_gave')
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
-                answear_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'Wiozę {"' + goods_name + u'", biernik}' )
-                userdata.q_load_answear_id = answear_id
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
+                answer_id = self.conversation_interface.setAutomaticAnswer( 'q_load', u'Wiozę {"' + goods_name + u'", biernik}' )
+                userdata.q_load_answer_id = answer_id
                 return 'ok'
 
             rospy.sleep(0.1)
@@ -94,7 +94,7 @@ class SayAskForGoods(smach_rcprg.State):
 
 class SayTakeGoods(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['goods_name', 'q_load_answear_id'],
+        smach_rcprg.State.__init__(self, input_keys=['goods_name', 'q_load_answer_id'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown', 'timeout'])
 
         self.conversation_interface = conversation_interface
@@ -111,7 +111,7 @@ class SayTakeGoods(smach_rcprg.State):
         self.conversation_interface.addExpected('ack', True)
         self.conversation_interface.addExpected('ack_i_took', True)
 
-        answear_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na odebranie {"' + goods_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Czekam na odebranie {"' + goods_name + u'", dopelniacz}' )
 
         start_time = rospy.Time.now()
         while True:
@@ -125,16 +125,16 @@ class SayTakeGoods(smach_rcprg.State):
             if loop_time_s > ACK_WAIT_MAX_TIME_S:
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
-                # Do not remove q_load_answear, because we want to enter this state again
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
+                # Do not remove q_load_answer, because we want to enter this state again
                 return 'timeout'
 
             if self.preempt_requested():
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
-                if not userdata.q_load_answear_id is None:
-                    self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answear_id)
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
+                if not userdata.q_load_answer_id is None:
+                    self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answer_id)
                 self.service_preempt()
                 return 'preemption'
 
@@ -142,9 +142,9 @@ class SayTakeGoods(smach_rcprg.State):
                     self.conversation_interface.consumeItem('ack_i_took'):
                 self.conversation_interface.removeExpected('ack')
                 self.conversation_interface.removeExpected('ack_i_took')
-                self.conversation_interface.removeAutomaticAnswer(answear_id)
-                if not userdata.q_load_answear_id is None:
-                    self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answear_id)
+                self.conversation_interface.removeAutomaticAnswer(answer_id)
+                if not userdata.q_load_answer_id is None:
+                    self.conversation_interface.removeAutomaticAnswer(userdata.q_load_answer_id)
                 return 'ok'
 
             rospy.sleep(0.1)
@@ -210,7 +210,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('AskForGoods', SayAskForGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'MoveBack', 'preemption':'PREEMPTED', 'error':'FAILED',
                                     'timeout':'AskForGoods','shutdown':'shutdown'},
-                                    remapping={'goods_name':'goal', 'q_load_answear_id':'q_load_answear_id'})
+                                    remapping={'goods_name':'goal', 'q_load_answer_id':'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
@@ -220,7 +220,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('SayGiveGoods', SayTakeGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'SetHeightEnd', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown', 'timeout':'SayGiveGoods'},
-                                    remapping={'goods_name':'goal', 'q_load_answear_id':'q_load_answear_id'})
+                                    remapping={'goods_name':'goal', 'q_load_answer_id':'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('SetHeightEnd', navigation.SetHeight(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIFinished', 'preemption':'PREEMPTED', 'error': 'FAILED',

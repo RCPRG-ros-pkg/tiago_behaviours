@@ -370,7 +370,7 @@ class MoveTo(smach_rcprg.State):
         place_name = userdata.move_goal.parameters['place_name']
 
         assert isinstance(place_name, unicode)
-        answear_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Jadę do {"' + place_name + u'", dopelniacz}' )
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'Jadę do {"' + place_name + u'", dopelniacz}' )
 
         pose = userdata.move_goal.parameters['pose']
         place_name = userdata.move_goal.parameters['place_name']
@@ -378,12 +378,12 @@ class MoveTo(smach_rcprg.State):
         if self.sim_mode == 'sim':
             for i in range(100):
                 if self.preempt_requested():
-                    self.conversation_interface.removeAutomaticAnswer(answear_id)
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
                     self.service_preempt()
                     return 'preemption'
 
                 rospy.sleep(0.1)
-            self.conversation_interface.removeAutomaticAnswer(answear_id)
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
             return 'ok'
         else:
             goal = MoveBaseGoal()
@@ -417,19 +417,19 @@ class MoveTo(smach_rcprg.State):
 
                 if self.__shutdown__:
                     client.cancel_all_goals()
-                    self.conversation_interface.removeAutomaticAnswer(answear_id)
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
                     self.service_preempt()
                     return 'shutdown'
 
                 if loop_time_s > NAVIGATION_MAX_TIME_S:
                     # break the loop, end with error state
-                    self.conversation_interface.removeAutomaticAnswer(answear_id)
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
                     rospy.logwarn('State: Navigation took too much time, returning error')
                     client.cancel_all_goals()
                     return 'stall'
 
                 if self.preempt_requested():
-                    self.conversation_interface.removeAutomaticAnswer(answear_id)
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
                     client.cancel_all_goals()
                     self.service_preempt()
                     return 'preemption'
@@ -437,7 +437,7 @@ class MoveTo(smach_rcprg.State):
                 rospy.sleep(0.1)
 
             # Manage state of the move_base action server
-            self.conversation_interface.removeAutomaticAnswer(answear_id)
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
 
             # Here check move_base DONE status
             if self.move_base_status == GoalStatus.PENDING:

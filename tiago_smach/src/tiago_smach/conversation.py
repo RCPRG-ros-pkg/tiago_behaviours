@@ -283,6 +283,6 @@ class ConversationInterface:
         if not name in self.__automatic_answers_name_map__:
             return []
         result = []
-        for answear_id, text in self.__automatic_answers_name_map__[name].iteritems():
+        for answer_id, text in self.__automatic_answers_name_map__[name].iteritems():
             result.append(text)
         return result
