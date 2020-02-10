@@ -31,7 +31,7 @@ class ConversationMachine:
         self.rico_says_client.wait_for_server()
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
 
-        self.sub = rospy.Subscriber("rico_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
+        self.sub = rospy.Subscriber("rico_filtered_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
 
         # Expected queries
         self.__expected_query_types__ = set()
@@ -81,12 +81,15 @@ class ConversationMachine:
                 # Manage expected queries
                 if query_type in self.__expected_query_types__:
                     self.__expected_queries__[query_type] = intent
-                    #if self.__expected_autoremove_dict__[query_type] == True:
-                    #    self.__expected_query_types__[query_type]
 
                 # Manage automatic answers
                 answer_id_list = self.getAutomaticAnswersIds( query_type )
                 self.__pending_automatic_answers__ = self.__pending_automatic_answers__ + answer_id_list
+
+                # Manage unexpected queries
+                if not query_type in self.__expected_query_types__ and not bool(answer_id_list):
+                    # Add special answer for unexpected intent
+                    self.__pending_automatic_answers__.append( -1 )
 
             # Remove all intents
             self.__intent_list__ = set()
@@ -151,6 +154,8 @@ class ConversationMachine:
         return result
 
     def __getAutomaticAnswerText__(self, answer_id):
+        if answer_id == -1:
+            return 'niekorzystne warunki pogodowe nie wiem o co chodzi'
         query_type, text = self.__automatic_answers_id_map__[answer_id]
         return text
 
