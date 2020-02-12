@@ -40,6 +40,8 @@ class SayAskForGoods(smach_rcprg.State):
 
         self.conversation_interface = conversation_interface
 
+        self.description = u'Proszę o podanie rzeczy'
+
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
@@ -99,6 +101,7 @@ class SayTakeGoods(smach_rcprg.State):
                              outcomes=['ok', 'preemption', 'error', 'shutdown', 'timeout'])
 
         self.conversation_interface = conversation_interface
+        self.description = u'Proszę o odebranie rzeczy'
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -160,6 +163,8 @@ class SayIFinished(smach_rcprg.State):
 
         self.conversation_interface = conversation_interface
 
+        self.description = u'Mówię, że zakończyłem'
+
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
@@ -183,6 +188,8 @@ class BringGoods(smach_rcprg.StateMachine):
         self.userdata.kitchen_pose = navigation.PoseDescription({'place_name':u'kuchnia'})
         self.userdata.default_height = 0.2
         self.userdata.lowest_height = 0.0
+
+        self.description = u'Podaję rzecz'
 
         with self:
             smach_rcprg.StateMachine.add('RememberCurrentPose', navigation.RememberCurrentPose(sim_mode),
@@ -232,3 +239,7 @@ class BringGoods(smach_rcprg.StateMachine):
 
             smach_rcprg.StateMachine.add('SayIFinished', SayIFinished(sim_mode, conversation_interface),
                                     transitions={'ok':'FINISHED', 'shutdown':'shutdown'})
+
+#    def execute(self, userdata):
+#        self.description = u'Podaję {"' + userdata.goal + u'", biernik}'
+#        return super(BringGoods, self).execute(userdata)

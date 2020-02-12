@@ -10,6 +10,7 @@ import smach
 import smach_ros
 from std_msgs.msg import String
 from tiago_smach.ros_node_utils import get_node_names
+import tiago_msgs.msg
 
 class SmachShutdownManager:
     def __init__(self, main_sm, list_asw, list_sis):
@@ -45,6 +46,8 @@ class DynAgent:
         self.sub_task_state_cmd = rospy.Subscriber('/' + self.name + '/task_state_cmd', String, self.callbackTaskStateCmd)
         self.finished = False
 
+        self.pub_diag = rospy.Publisher('/current_dyn_agent/diag', tiago_msgs.msg.DynAgentDiag, queue_size=10)
+
     def run(self, main_sm):
         self.main_sm = main_sm
 
@@ -79,6 +82,21 @@ class DynAgent:
             self.finished = True
             self.main_sm.shutdownRequest()
 
+    def getActiveStates(self, sm):
+        result = []
+        if hasattr( sm, 'get_active_states' ):
+            for state_name in sm.get_active_states():
+                st = sm.get_children()[state_name]
+                if hasattr( st, 'description' ) and not st.description is None:
+                    description = st.description
+                else:
+                    description = ''
+                result.append( (state_name, description) )
+            for state_name in sm.get_active_states():
+                st = sm.get_children()[state_name]
+                result = result + self.getActiveStates( st )
+        return result
+
     def connectionCheckThread(self, args):
         while not self.finished:
             active_ros_nodes = get_node_names()
@@ -87,4 +105,15 @@ class DynAgent:
                 self.finished = True
                 self.main_sm.shutdownRequest()
                 break
+
+            # Publish diagnostic information
+            diag = tiago_msgs.msg.DynAgentDiag()
+            diag.agent_name = self.name
+            active_states = self.getActiveStates( self.main_sm )
+            for state_name, state_desc in active_states:
+                diag.current_states.append( state_name )
+                diag.descriptions.append( state_desc )
+
+            self.pub_diag.publish( diag )
+
             time.sleep(0.2)
