@@ -11,7 +11,6 @@ import actionlib
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 

@@ -12,7 +12,6 @@ import copy
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-from pal_common_msgs.msg import *
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 import std_srvs.srv as std_srvs
 

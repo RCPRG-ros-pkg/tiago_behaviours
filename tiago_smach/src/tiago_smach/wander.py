@@ -11,7 +11,6 @@ import actionlib
 
 from move_base_msgs.msg import *
 from actionlib_msgs.msg import GoalStatus
-from pal_common_msgs.msg import *
 from tf.transformations import quaternion_from_euler
 from geometry_msgs.msg import Pose
 
@@ -40,6 +39,8 @@ class PickPose(smach_rcprg.State):
         self.sim_mode = sim_mode
         self.kb_places = kb_places
 
+        self.description = u'Wybieram punkt docelowy'
+
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
@@ -60,6 +61,8 @@ class Wander(smach_rcprg.StateMachine):
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
         self.userdata.default_height = 0.2
+
+        self.description = u'Patroluję'
 
         with self:
             smach_rcprg.StateMachine.add('SetNavParams', navigation.SetNavParams(sim_mode),
