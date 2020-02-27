@@ -15,7 +15,7 @@ from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import Pose, PoseWithCovarianceStamped
 import std_srvs.srv as std_srvs
 
-from tf.transformations import quaternion_from_euler
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import pl_nouns.odmiana as ro
 
 import smach_rcprg
@@ -26,14 +26,14 @@ NAVIGATION_MAX_TIME_S = 100
 
 
 def makePose(x, y, theta):
-    q = quaternion_from_euler(0, 0, theta)
+    q = quaternion_from_euler(theta, 0, 0)
     result = Pose()
     result.position.x = x
     result.position.y = y
-    result.orientation.x = q[0]
-    result.orientation.y = q[1]
-    result.orientation.z = q[2]
-    result.orientation.w = q[3]
+    result.orientation.w = q[0]
+    result.orientation.x = q[1]
+    result.orientation.y = q[2]
+    result.orientation.z = q[3]
     return result
 
 class RememberCurrentPose(smach_rcprg.State):
@@ -429,6 +429,153 @@ class MoveTo(smach_rcprg.State):
         else:
             goal = MoveBaseGoal()
             goal.target_pose.pose = pose
+            goal.target_pose.header.frame_id = 'map'
+            goal.target_pose.header.stamp = rospy.Time.now()
+
+            client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+            client.wait_for_server()
+
+            # start moving
+            client.send_goal(goal, self.move_base_done_cb, self.move_base_active_cb, self.move_base_feedback_cb)
+
+            # action_feedback = GoActionFeedback()
+            # action_result = GoActionResult()
+            # action_result.result.is_goal_accomplished = False
+            # userdata.nav_result = action_result.result
+
+            start_time = rospy.Time.now()
+
+            self.is_goal_achieved = False
+            while self.is_goal_achieved == False:
+                # action_feedback.feedback.current_pose = self.current_pose
+
+                # userdata.nav_feedback = action_feedback.feedback
+                # userdata.nav_actual_pose = self.current_pose
+
+                end_time = rospy.Time.now()
+                loop_time = end_time - start_time
+                loop_time_s = loop_time.secs
+
+                if self.__shutdown__:
+                    client.cancel_all_goals()
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    self.service_preempt()
+                    return 'shutdown'
+
+                if loop_time_s > NAVIGATION_MAX_TIME_S:
+                    # break the loop, end with error state
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    rospy.logwarn('State: Navigation took too much time, returning error')
+                    client.cancel_all_goals()
+                    return 'stall'
+
+                if self.preempt_requested():
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    client.cancel_all_goals()
+                    self.service_preempt()
+                    return 'preemption'
+
+                rospy.sleep(0.1)
+
+            # Manage state of the move_base action server
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
+
+            # Here check move_base DONE status
+            if self.move_base_status == GoalStatus.PENDING:
+                # The goal has yet to be processed by the action server
+                raise Exception('Wrong move_base action status: "PENDING"')
+            elif self.move_base_status == GoalStatus.ACTIVE:
+                # The goal is currently being processed by the action server
+                raise Exception('Wrong move_base action status: "ACTIVE"')
+            elif self.move_base_status == GoalStatus.PREEMPTED:
+                # The goal received a cancel request after it started executing
+                #   and has since completed its execution (Terminal State)
+                return 'preemption'
+            elif self.move_base_status == GoalStatus.SUCCEEDED:
+                # The goal was achieved successfully by the action server (Terminal State)
+                return 'ok'
+            elif self.move_base_status == GoalStatus.ABORTED:
+                # The goal was aborted during execution by the action server due
+                #    to some failure (Terminal State)
+                return 'stall'
+            elif self.move_base_status == GoalStatus.REJECTED:
+                # The goal was rejected by the action server without being processed,
+                #    because the goal was unattainable or invalid (Terminal State)
+                return 'error'
+            elif self.move_base_status == GoalStatus.PREEMPTING:
+                # The goal received a cancel request after it started executing
+                #    and has not yet completed execution
+                raise Exception('Wrong move_base action status: "PREEMPTING"')
+            elif self.move_base_status == GoalStatus.RECALLING:
+                # The goal received a cancel request before it started executing,
+                #    but the action server has not yet confirmed that the goal is canceled
+                raise Exception('Wrong move_base action status: "RECALLING"')
+            elif self.move_base_status == GoalStatus.RECALLED:
+                # The goal received a cancel request before it started executing
+                #    and was successfully cancelled (Terminal State)
+                return 'preemption'
+            elif self.move_base_status == GoalStatus.LOST:
+                # An action client can determine that a goal is LOST. This should not be
+                #    sent over the wire by an action server
+                raise Exception('Wrong move_base action status: "LOST"')
+            else:
+                raise Exception('Wrong move_base action status value: "' + str(self.move_base_status) + '"')
+
+    def move_base_feedback_cb(self, feedback):
+        self.current_pose = feedback.base_position.pose
+        self.is_feedback_received = True
+
+    def move_base_done_cb(self, status, result):
+        self.is_goal_achieved = True
+        self.move_base_status = status
+
+    def move_base_active_cb(self):
+        # Do nothing
+        return
+
+class TurnAround(smach_rcprg.State):
+    def __init__(self, sim_mode, conversation_interface):
+        assert sim_mode in ['sim', 'gazebo', 'real']
+        self.current_pose = Pose()
+        self.is_feedback_received = False
+        self.move_base_status = GoalStatus.PENDING
+        self.is_goal_achieved = False
+        self.sim_mode = sim_mode
+        self.conversation_interface = conversation_interface
+
+        smach_rcprg.State.__init__(self,
+                             outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
+                             input_keys=['current_pose'])
+
+        self.description = u'Odwracam się'
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+
+        pose = userdata.current_pose.parameters['pose']
+
+        theta, beta, alpha = euler_from_quaternion( (pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z) )
+        print 'TurnAround current theta: {} {} {}'.format(alpha, beta, theta)
+        if theta < 0:
+            new_pose = makePose(pose.position.x, pose.position.y, theta+math.pi)
+        else:
+            new_pose = makePose(pose.position.x, pose.position.y, theta-math.pi)
+
+        answer_id = self.conversation_interface.setAutomaticAnswer( 'q_current_task', u'niekorzystne warunki pogodowe odwracam się' )
+
+        if self.sim_mode == 'sim':
+            for i in range(50):
+                if self.preempt_requested():
+                    self.conversation_interface.removeAutomaticAnswer(answer_id)
+                    self.service_preempt()
+                    return 'preemption'
+
+                rospy.sleep(0.1)
+            self.conversation_interface.removeAutomaticAnswer(answer_id)
+            return 'ok'
+        else:
+            goal = MoveBaseGoal()
+            goal.target_pose.pose = new_pose
             goal.target_pose.header.frame_id = 'map'
             goal.target_pose.header.stamp = rospy.Time.now()
 
