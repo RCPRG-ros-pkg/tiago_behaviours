@@ -154,8 +154,7 @@ class TaskHarmonizer:
         for task_spec in self.tasks_spec_list:
             for node_name in active_ros_nodes:
                 if '/' + task_spec.task_name == node_name:
-                    pass
-                    #raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
+                    raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
 
 def main():
     rospy.init_node('rico_task_harmonizer')
