@@ -51,10 +51,11 @@ class DynAgent:
     def run(self, main_sm):
         self.main_sm = main_sm
 
-        sis_main = smach_ros.IntrospectionServer('behaviour_server', self.main_sm, '/SM_BEHAVIOUR_SERVER')
-        sis_main.start()
+        #sis_main = smach_ros.IntrospectionServer('behaviour_server', self.main_sm, '/SM_BEHAVIOUR_SERVER')
+        #sis_main.start()
 
-        ssm = SmachShutdownManager(self.main_sm, [], [sis_main])
+        #ssm = SmachShutdownManager(self.main_sm, [], [sis_main])
+        ssm = SmachShutdownManager(self.main_sm, [], [])
 
         # Set shutdown hook
         rospy.on_shutdown( ssm.on_shutdown )
@@ -106,14 +107,20 @@ class DynAgent:
                 self.main_sm.shutdownRequest()
                 break
 
-            # Publish diagnostic information
-            diag = tiago_msgs.msg.DynAgentDiag()
-            diag.agent_name = self.name
-            active_states = self.getActiveStates( self.main_sm )
-            for state_name, state_desc in active_states:
-                diag.current_states.append( state_name )
-                diag.descriptions.append( state_desc )
-
-            self.pub_diag.publish( diag )
+            try:
+                # Publish diagnostic information
+                diag = tiago_msgs.msg.DynAgentDiag()
+                diag.agent_name = self.name
+                active_states = self.getActiveStates( self.main_sm )
+                for state_name, state_desc in active_states:
+                    diag.current_states.append( state_name )
+                    diag.descriptions.append( state_desc )
+                self.pub_diag.publish( diag )
+            except Exception as e:
+                print 'Detected exception in dynamic agent'
+                print e
+                self.finished = True
+                self.main_sm.shutdownRequest()
+                break
 
             time.sleep(0.2)

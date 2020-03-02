@@ -7,13 +7,13 @@ import time
 import rospy
 import smach
 import smach_ros
+import std_msgs
 
 import tiago_msgs.msg
 
 import smach_rcprg
 
 import actionlib
-import tiago_msgs.msg
 
 #
 # New, high-level interface for conversations
@@ -32,6 +32,7 @@ class ConversationMachine:
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
 
         self.sub = rospy.Subscriber("rico_filtered_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
+        self.pub = rospy.Publisher('/activate_vad', std_msgs.msg.Bool, queue_size=10)
 
         # Expected queries
         self.__expected_query_types__ = set()
@@ -205,10 +206,13 @@ class ConversationMachine:
             self.__intent_list_lock__.release()
             return None
 
+    def startListening(self):
+        self.pub.publish(std_msgs.msg.Bool())
+
 #
 # The SM that govenrs the highest-level conversation.
 #
-
+'''
 class HearState(smach_rcprg.State):
     def __init__(self, conversation_interface):
         smach_rcprg.State.__init__(self, output_keys=[],
@@ -476,3 +480,4 @@ class ConversationInterface:
         for answer_id, text in self.__automatic_answers_name_map__[name].iteritems():
             result.append(text)
         return result
+'''

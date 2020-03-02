@@ -24,6 +24,8 @@ class TaskHarmonizer:
         self.tasks_spec_list = tasks_spec_list
         self.checkForDynamicAgentsRunning()
 
+        self.cant_hear_you = False
+
         self.sub_list = []
         for topic_name in intent_topics:
             self.sub_list.append( rospy.Subscriber(topic_name, tiago_msgs.msg.Command, self.callback) )
@@ -66,7 +68,10 @@ class TaskHarmonizer:
             print 'param_name, param_value', param_name, param_value
 
         task = None
-        if self.hasTaskSpecByIntent(data.intent_name):
+        print u'data.intent_name: "{}"'.format(data.intent_name)
+        if data.intent_name == '':
+            self.cant_hear_you = True
+        elif self.hasTaskSpecByIntent(data.intent_name):
             task_spec = self.getTaskSpecByIntent(data.intent_name)
             if not self.pending_task_request is None:
                 print 'ERROR: pending task request "' + str(self.pending_task_request[0]) + '" was not consumed an ne intent for task "' + task_spec.task_name + '" arrived'
@@ -105,6 +110,11 @@ class TaskHarmonizer:
                     print 'Task "' + self.current_task[0].task_name + '" has finished'
                     self.current_subprocess = None
                     self.current_task = None
+            if self.cant_hear_you:
+                goal = tiago_msgs.msg.SaySentenceGoal()
+                goal.sentence = 'niekorzystne warunki pogodowe nie słyszę'
+                self.rico_says_client.send_goal(goal)
+                self.cant_hear_you = False
             rospy.sleep(0.1)
 
     def abortCurrentTask(self):
@@ -154,7 +164,8 @@ class TaskHarmonizer:
         for task_spec in self.tasks_spec_list:
             for node_name in active_ros_nodes:
                 if '/' + task_spec.task_name == node_name:
-                    raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
+                    #raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
+                    pass
 
 def main():
     rospy.init_node('rico_task_harmonizer')
@@ -170,6 +181,7 @@ def main():
         TaskSpec('projects/incare-dialog-agent/agent/intents/0165eceb-9621-4a7d-aecc-7a879951da18', 'move_to', 5, ['miejsce']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/7acd4325-4cdd-4e15-99be-ad545f4dddd5', 'stop', 10, []),
         TaskSpec('projects/incare-dialog-agent/agent/intents/d9e96166-030b-442f-a513-d3fa2e044030', 'wander', 5, []),
+        TaskSpec('intent_call', 'call', 1, ['miejsce']),
         TaskSpec('default', 'idle', 0, []),
         # TESTS:
         TaskSpec('test_bring_goods', 'test_bring_goods', 0, ['przedmiot']),
