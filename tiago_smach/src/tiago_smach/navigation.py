@@ -162,8 +162,11 @@ class UnderstandGoal(smach_rcprg.State):
                 if pl.getType() == 'point':
                     pt_dest = pl.getPt()
                     norm = pl.getN()
-                    angle_dest = math.atan2(-norm[1], -norm[0])
+                    angle_dest = -math.atan2(norm[1], norm[0])
+                    pt = pt_dest
                     pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
+                    print 'UnderstandGoal place type: point'
+                    print 'pt: {}, pt_dest: {}, norm: {}, angle_dest: {}'.format(pt, pt_dest, norm, angle_dest)
                 elif pl.getType() == 'volumetric':
                     pt_dest = self.kb_places.getClosestPointOfPlace(pt_start, pl.getId(), mc_name, dbg_output_path = '/home/dseredyn/tiago_public_ws/img')
                     angle_dest = 0.0
