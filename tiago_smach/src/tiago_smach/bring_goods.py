@@ -48,7 +48,6 @@ class SayAskForGoods(smach_rcprg.State):
 
         goods_name = userdata.goods_name
 
-        #self.conversation_interface.addSpeakSentence( u'Podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe podaj mi {"' + goods_name + u'", biernik} i potwierdź' )
 
         self.conversation_interface.addExpected('ack')
@@ -242,13 +241,13 @@ class BringGoods(smach_rcprg.StateMachine):
                                     remapping={'goods_name':'goal', 'q_load_answer_id':'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
-                                    transitions={'FINISHED':'SayGiveGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+                                    transitions={'FINISHED':'SayTakeGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'initial_pose'})
 
-            smach_rcprg.StateMachine.add('SayGiveGoods', SayTakeGoods(sim_mode, conversation_interface),
+            smach_rcprg.StateMachine.add('SayTakeGoods', SayTakeGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'SetHeightEnd', 'preemption':'PREEMPTED', 'error': 'FAILED',
-                                    'shutdown':'shutdown', 'timeout':'SayGiveGoods', 'turn_around':'TurnAroundB1'},
+                                    'shutdown':'shutdown', 'timeout':'SayTakeGoods', 'turn_around':'TurnAroundB1'},
                                     remapping={'goods_name':'goal', 'q_load_answer_id':'q_load_answer_id'})
 
             smach_rcprg.StateMachine.add('TurnAroundA1', navigation.RememberCurrentPose(sim_mode),
@@ -267,7 +266,7 @@ class BringGoods(smach_rcprg.StateMachine):
                                     remapping={'current_pose':'current_pose'})
 
             smach_rcprg.StateMachine.add('TurnAroundB2', navigation.TurnAround(sim_mode, conversation_interface),
-                                    transitions={'ok':'SayGiveGoods', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    transitions={'ok':'SayTakeGoods', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown', 'stall':'AskForGoods'},
                                     remapping={'current_pose':'current_pose'})
 
