@@ -17,6 +17,8 @@ import tiago_kb.places_xml as kb_p
 
 from tiago_smach.task_manager import PoseDescription
 
+from multitasker.msg import RobotResource, ScheduleParams
+
 class MainState(smach_rcprg.State):
     def __init__(self, conversation_interface):
         self.conversation_interface = conversation_interface
@@ -78,9 +80,14 @@ class MainSM(smach_rcprg.StateMachine):
     def shutdownRequest(self):
         self.conversation_interface.stop()
         self.request_preempt()
+def ptf_csp(ptf_id):
+    print "calculating SP: ", ptf_id
+    if ptf_id[0] == "scheduleParams":
+        return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
+
 
 def main():
-    da = DynAgent( 'idle' )
+    da = DynAgent( 'idle', "myType_idle", ptf_csp )
     da.run( MainSM() )
 
     return 0

@@ -18,6 +18,7 @@ from tiago_smach.task_manager import PoseDescription
 
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 
+from multitasker.msg import RobotResource, ScheduleParams
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface):
         self.conversation_interface = conversation_interface
@@ -29,6 +30,20 @@ class Cleanup(smach_rcprg.State):
         print 'Cleanup.execute'
         self.conversation_interface.stop()
         return 'ok'
+class GetSuspend(smach_rcprg.State):
+    def __init__(self, conversation_interface):
+        self.conversation_interface = conversation_interface
+
+        smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print 'GetSuspend.execute'
+        print "susp data: ", userdata.susp_data
+        #srv.shutdown()
+        rospy.sleep(5)
+        self.conversation_interface.stop()
+        return 'ok'
 
 #
 # The SM that govenrs the highest-level behaviour.
@@ -36,8 +51,7 @@ class Cleanup(smach_rcprg.State):
 
 class MainSM(smach_rcprg.StateMachine):
     def __init__(self):
-        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'])
-
+        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'], input_keys=[], output_keys=[])
         places_xml_filename = rospy.get_param('/kb_places_xml')
         sim_mode = str(rospy.get_param('/sim_mode'))
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -74,13 +88,18 @@ class MainSM(smach_rcprg.StateMachine):
         self.conversation_interface.start()
 
         self.userdata.goal = goods_name_m
+        self.userdata.goal = goods_name_m
 
         with self:
             smach_rcprg.StateMachine.add('BringGoods',
                                     tiago_smach.bring_goods.BringGoods(sim_mode, self.conversation_interface, kb_places),
-                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup',
+                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup', 'SUSPENDED': 'Suspending',
                                     'shutdown':'shutdown'},
-                                    remapping={'goal':'goal'})
+                                    remapping={'goal':'goal', 'susp_data':'susp_data'})
+            smach_rcprg.StateMachine.add('Suspending',
+                                    GetSuspend(self.conversation_interface),
+                                    transitions={'ok':'Finished', 'shutdown':'shutdown'},
+                                    remapping={'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('Cleanup',
                                     Cleanup(self.conversation_interface),
@@ -91,9 +110,15 @@ class MainSM(smach_rcprg.StateMachine):
     def shutdownRequest(self):
         self.conversation_interface.stop()
         self.request_preempt()
+    def handleSuspension(self, data):
+        print "handling suspension with data: ", data
+def ptf_csp(ptf_id):
+    print "calculating SP: ", ptf_id
+    if ptf_id[0] == "scheduleParams":
+        return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
 
 def main():
-    da = DynAgent( 'bring_goods' )
+    da = DynAgent( 'bring_goods', "myType_bring_goods", ptf_csp )
     da.run( MainSM() )
 
     return 0

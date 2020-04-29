@@ -9,6 +9,8 @@ import rospy
 import smach
 import smach_ros
 from std_msgs.msg import String
+from multitasker.msg import Status, CMD
+from multitasker.srv import CostConditions, SuspendConditions
 from tiago_smach.ros_node_utils import get_node_names
 import tiago_msgs.msg
 
@@ -37,9 +39,19 @@ class SmachShutdownManager:
         self.__main_sm__.request_preempt()
 
         #rospy.sleep(2.0)
+class SuspendRequest:
+    def __init__(self):
+        self.req_data = String()
+    def setData(self, data):
+        self.req_data = data
+    def getData(self):
+        return self.req_data
 
 class DynAgent:
-    def __init__(self, name):
+    def __init__(self, name, taskType, ptf_csp):
+
+        global debug
+        debug = True
         self.name = name
         rospy.init_node(self.name)
         rospy.sleep(0.1)
@@ -47,6 +59,55 @@ class DynAgent:
         self.finished = False
 
         self.pub_diag = rospy.Publisher('/current_dyn_agent/diag', tiago_msgs.msg.DynAgentDiag, queue_size=10)
+        # assign ptf update state
+        self.ptf_csp = ptf_csp
+        # set DA_ID used by TaskER
+        self.da_ID = self.name
+        self.taskType = taskType
+        self.exec_fsm_state = ""
+        self.da_state = "init"
+        self.terminateFlag = False
+        self.startFlag = False
+        self.ptf_csp(["scheduleParams", None])
+        # object to send suspend request to the current task stage
+        self.da_suspend_request = SuspendRequest()
+        self.da_suspend_request.setData("suspension requirements from the task harmoniser")
+
+    
+    def startTask(self,data):
+        self.startFlag = True
+
+    def suspTask(self, data="suspension requirements from the task harmoniser"):
+        print("\n","HOLD: ",str( data)+"\n")
+        # propagate suspend request to exec FSM
+        self.da_suspend_request.setData(data)
+
+    def updateStatus(self):
+        global debug
+        my_status = Status()
+        # print("UPDATEING STATUS id: "+str(self.da_ID)+"\n")
+        my_status.da_id = self.da_ID
+        my_status.exec_state_name = self.exec_fsm_state
+        my_status.da_state = self.da_state
+        my_status.type = self.taskType
+        my_status.schedule_params = self.ptf_csp(["scheduleParams", None])
+        if debug:
+            print("UPDATEING STATUS params of: "+str(self.da_ID)+"\n"+str(my_status.schedule_params)+"\n")
+        self.pub_status.publish(my_status) 
+        # print("STATUS was sent"+"\n")
+    def cmd_handler(self, data):
+        global debug
+        if data.cmd == "start":
+            self.startTask(data.data)
+        elif data.cmd == "susp":
+            self.suspTask(data.data)
+        elif data.cmd == "susp":
+            self.suspTask(data.data)
+
+    def suspendConditionHandler(self, req):
+        return self.ptf_csp(["suspendCondition",req])
+    def startConditionHandler(self, req):
+        return self.ptf_csp(["startCondition",req])
 
     def run(self, main_sm):
         self.main_sm = main_sm
@@ -56,16 +117,42 @@ class DynAgent:
 
         #ssm = SmachShutdownManager(self.main_sm, [], [sis_main])
         ssm = SmachShutdownManager(self.main_sm, [], [])
+        # setup status interface for the task harmoniser
+        self.pub_status = rospy.Publisher('TH/statuses', Status, queue_size=10)
+        # subsribe to commands from the task harmoniser 
 
+        node_namespace = rospy.get_name() + "/TaskER"
+        start_name = node_namespace + "/startTask"
+        self.cmd_subscriber = rospy.Subscriber(node_namespace+"/cmd", CMD, self.cmd_handler)
+        cost_cond_name = node_namespace + "/get_cost_on_conditions"
+        self.cost_cond_srv = rospy.Service(cost_cond_name, CostConditions, self.startConditionHandler)
         # Set shutdown hook
         rospy.on_shutdown( ssm.on_shutdown )
 
         thread_conn = threading.Thread(target=self.connectionCheckThread, args=(1,))
         thread_conn.start()
+        # wait for start signal
+        r = rospy.Rate(2)
+        while not rospy.is_shutdown():
+            self.updateStatus()
+            if self.startFlag:
+                break 
+            if self.terminateFlag:
+                ssm.on_shutdown()
+                return
+            r.sleep()
 
-        smach_thread = threading.Thread(target=self.main_sm.execute)
+        # task will be started, so the interface to request start conditions by 'par' buffer is not required anymore
+        self.cost_cond_srv.shutdown()
+        # setup suspend condition handler 
+        susp_cond_name = node_namespace + "/get_suspend_conditions"
+        self.susp_cond_srv = rospy.Service(susp_cond_name, SuspendConditions, self.suspendConditionHandler)
+        # extend userdata with suspension request object
+        self.main_sm.userdata.susp_data = self.da_suspend_request
+        smach_thread = threading.Thread(target=self.main_sm.execute, args=(smach.UserData(),))
         smach_thread.start()
-
+        rospy.sleep(3)
+        self.da_suspend_request.setData("DUUUUPAAAA")
         print 'Smach thread is running'
 
         # Block until everything is preempted

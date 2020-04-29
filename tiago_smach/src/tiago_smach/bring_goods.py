@@ -194,13 +194,12 @@ class SayIFinished(smach_rcprg.State):
 
 class BringGoods(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.StateMachine.__init__(self, input_keys=['goal'],
+        smach_rcprg.StateMachine.__init__(self, input_keys=['goal','susp_data'], output_keys=['susp_data'],
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
-                                                    'FINISHED', 'shutdown'])
+                                                    'FINISHED','SUSPENDED', 'shutdown'])
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
-
         # TODO: use knowledge base for this:
 
         self.userdata.kitchen_pose = navigation.PoseDescription({'place_name':u'kuchnia'})
@@ -278,6 +277,12 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('SayIFinished', SayIFinished(sim_mode, conversation_interface),
                                     transitions={'ok':'FINISHED', 'shutdown':'shutdown'})
 
-#    def execute(self, userdata):
-#        self.description = u'Podaję {"' + userdata.goal + u'", biernik}'
-#        return super(BringGoods, self).execute(userdata)
+    # def execute(self, userdata):
+    #     while not rospy.is_shutdown():
+    #         print "GOODS: ", userdata.susp_data.getData()
+    #         if userdata.susp_data.getData() == "suspension requirements from the task harmoniser":
+    #             return 'SUSPENDED'
+    #         rospy.sleep(1)
+    #     print "END GOODS"
+        # self.description = u'Podaję {"' + userdata.goal + u'", biernik}'
+        # return super(BringGoods, self).execute(userdata)

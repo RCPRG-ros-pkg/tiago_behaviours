@@ -27,8 +27,8 @@ class ConversationMachine:
         self.__intent_list_lock__ = threading.Lock()
 
         print 'ConversationMachine.__init__: waiting for rico_says ActionServer...'
-        self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
-        self.rico_says_client.wait_for_server()
+        #self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
+        #self.rico_says_client.wait_for_server()
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
 
         self.sub = rospy.Subscriber("rico_filtered_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
@@ -165,8 +165,8 @@ class ConversationMachine:
         print 'Rico says (blocking): "' + text + '"'
         goal = tiago_msgs.msg.SaySentenceGoal()
         goal.sentence = text
-        self.rico_says_client.send_goal(goal)
-        self.rico_says_client.wait_for_result()
+        print(goal)
+        #self.rico_says_client.wait_for_result()
         print 'Rico says (blocking) finished'
 
     # Starts speaking a sentence, returns id for polling
@@ -174,7 +174,7 @@ class ConversationMachine:
     #    print 'Rico says (non-blocking): "' + sentence + '"'
     #    goal = tiago_msgs.msg.SaySentenceGoal()
     #    goal.sentence = sentence
-    #    self.rico_says_client.send_goal(goal)
+    #    print(goal)
     #    self.rico_says_client.wait_for_result()
 
     def addExpected(self, query_type):
@@ -307,7 +307,7 @@ class SpeakState(smach_rcprg.State):
             print 'Rico says: "' + sentence + '"'
             goal = tiago_msgs.msg.SaySentenceGoal()
             goal.sentence = sentence
-            self.rico_says_client.send_goal(goal)
+            print(goal)
             self.rico_says_client.wait_for_result()
             #self.rico_says_client.get_result()
 

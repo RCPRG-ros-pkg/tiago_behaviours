@@ -39,8 +39,8 @@ class TaskHarmonizer:
         self.current_task_cmd = None
 
         print 'ConversationMachine.__init__: waiting for rico_says ActionServer...'
-        self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
-        self.rico_says_client.wait_for_server()
+        #self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
+        #self.rico_says_client.wait_for_server()
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
 
     def hasTaskSpecByIntent(self, intent_name):
@@ -95,7 +95,7 @@ class TaskHarmonizer:
                     print 'Cannot run task "' + self.pending_task_request[0].task_name + '"'
                     goal = tiago_msgs.msg.SaySentenceGoal()
                     goal.sentence = 'niekorzystne warunki pogodowe jestem teraz zajęty'
-                    self.rico_says_client.send_goal(goal)
+                    print(goal)
                     #self.rico_says_client.wait_for_result()
 
                 self.pending_task_request = None
@@ -113,7 +113,7 @@ class TaskHarmonizer:
             if self.cant_hear_you:
                 goal = tiago_msgs.msg.SaySentenceGoal()
                 goal.sentence = 'niekorzystne warunki pogodowe nie słyszę'
-                self.rico_says_client.send_goal(goal)
+                print(goal)
                 self.cant_hear_you = False
             rospy.sleep(0.1)
 
