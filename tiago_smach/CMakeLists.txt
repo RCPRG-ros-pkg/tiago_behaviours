@@ -12,7 +12,6 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   tf
   message_generation
-  TaskER
 )
 
 catkin_python_setup()
@@ -21,6 +20,7 @@ catkin_python_setup()
 catkin_package(
     CATKIN_DEPENDS
     rospy
+    TaskER
 )
 
 include_directories(

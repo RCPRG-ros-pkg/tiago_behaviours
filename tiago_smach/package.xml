@@ -20,9 +20,9 @@
   <depend>rospy</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
-  <depend>TaskER</depend>
   <depend>tf</depend>
   <build_depend>pl_nouns</build_depend>
   <exec_depend>pl_nouns</exec_depend>
+  <exec_depend>TaskER</exec_depend>
  
 </package>
