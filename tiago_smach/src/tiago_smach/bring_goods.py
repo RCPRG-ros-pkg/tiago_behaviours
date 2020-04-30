@@ -197,7 +197,7 @@ class BringGoods(smach_rcprg.StateMachine):
         smach_rcprg.StateMachine.__init__(self, input_keys=['goal','susp_data'], output_keys=['susp_data'],
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
-                                                    'FINISHED','SUSPENDED', 'shutdown'])
+                                                    'FINISHED', 'shutdown'])
         self.userdata.max_lin_vel = 0.2
         self.userdata.max_lin_accel = 0.5
         # TODO: use knowledge base for this:

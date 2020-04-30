@@ -19,6 +19,9 @@ from tiago_smach.task_manager import PoseDescription
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 
 from multitasker.msg import RobotResource, ScheduleParams
+# for ExeSuspension state
+import subprocess
+
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface):
         self.conversation_interface = conversation_interface
@@ -30,7 +33,55 @@ class Cleanup(smach_rcprg.State):
         print 'Cleanup.execute'
         self.conversation_interface.stop()
         return 'ok'
-class GetSuspend(smach_rcprg.State):
+class GetSuspension(smach_rcprg.State):
+    def __init__(self, conversation_interface):
+        self.conversation_interface = conversation_interface
+
+        smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'], output_keys=['fsm_es_out'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print 'GetSuspend.execute'
+        print "susp data: ", userdata.susp_data.getData()
+        userdata.fsm_es_out = userdata.susp_data.getData()
+        #srv.shutdown()
+        rospy.sleep(5)
+        return 'ok'
+
+class ExeSuspension(smach_rcprg.State):
+    def __init__(self, conversation_interface):
+        self.conversation_interface = conversation_interface
+
+        smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'],input_keys=['fsm_es_in'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print 'ExecSuspension.execute'
+        #srv.shutdown()
+        print userdata.fsm_es_in
+        p = subprocess.Popen(userdata.fsm_es_in , shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        # and you can block util the cmd execute finish
+        p.wait()
+        # or stdout, stderr = p.communicate()
+        return 'ok'
+class Wait(smach_rcprg.State):
+    def __init__(self, conversation_interface):
+        self.conversation_interface = conversation_interface
+
+        smach_rcprg.State.__init__(self, outcomes=['start', 'terminate'])
+
+    def execute(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        print 'Wait.execute'
+        #srv.shutdown()
+        while not userdata.susp_data.getData() == "resume":
+            if self.preempt_requested():
+                return 'terminate'
+            rospy.sleep(1)
+        return 'start'
+
+class UpdateTask(smach_rcprg.State):
     def __init__(self, conversation_interface):
         self.conversation_interface = conversation_interface
 
@@ -38,13 +89,9 @@ class GetSuspend(smach_rcprg.State):
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
-        print 'GetSuspend.execute'
-        print "susp data: ", userdata.susp_data
+        print 'UpdateTask.execute'
         #srv.shutdown()
-        rospy.sleep(5)
-        self.conversation_interface.stop()
         return 'ok'
-
 #
 # The SM that govenrs the highest-level behaviour.
 #
@@ -88,19 +135,30 @@ class MainSM(smach_rcprg.StateMachine):
         self.conversation_interface.start()
 
         self.userdata.goal = goods_name_m
-        self.userdata.goal = goods_name_m
-
+        self.userdata.fsm_es = ""
+        
         with self:
-            smach_rcprg.StateMachine.add('BringGoods',
+            smach_rcprg.StateMachine.add('ExecFSM',
                                     tiago_smach.bring_goods.BringGoods(sim_mode, self.conversation_interface, kb_places),
-                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'Cleanup', 'FAILED': 'Cleanup', 'SUSPENDED': 'Suspending',
+                                    transitions={'FINISHED':'Cleanup', 'PREEMPTED':'GetSuspension', 'FAILED': 'Cleanup',
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'goal', 'susp_data':'susp_data'})
-            smach_rcprg.StateMachine.add('Suspending',
-                                    GetSuspend(self.conversation_interface),
-                                    transitions={'ok':'Finished', 'shutdown':'shutdown'},
+            smach_rcprg.StateMachine.add('GetSuspension',
+                                    GetSuspension(self.conversation_interface),
+                                    transitions={'ok':'ExeSuspension', 'shutdown':'shutdown'},
+                                    remapping={'susp_data':'susp_data', 'fsm_es_out':'fsm_es'})
+            smach_rcprg.StateMachine.add('ExeSuspension',
+                                    ExeSuspension(self.conversation_interface),
+                                    transitions={'ok':'Wait', 'shutdown':'shutdown'},
+                                    remapping={'susp_data':'susp_data','fsm_es_in':'fsm_es'})
+            smach_rcprg.StateMachine.add('Wait',
+                                    Wait(self.conversation_interface),
+                                    transitions={'start':'UpdateTask', 'terminate':'Cleanup'},
                                     remapping={'susp_data':'susp_data'})
-
+            smach_rcprg.StateMachine.add('UpdateTask',
+                                    UpdateTask(self.conversation_interface),
+                                    transitions={'ok':'ExecFSM', 'shutdown':'shutdown'},
+                                    remapping={'susp_data':'susp_data'})
             smach_rcprg.StateMachine.add('Cleanup',
                                     Cleanup(self.conversation_interface),
                                     transitions={'ok':'Finished', 'shutdown':'shutdown'},
@@ -118,7 +176,17 @@ def ptf_csp(ptf_id):
         return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
 
 def main():
-    da = DynAgent( 'bring_goods', "myType_bring_goods", ptf_csp )
+    da_name = None
+    da_type = None
+    for idx in range(1, len(sys.argv), 2):
+                if sys.argv[idx] == 'da_name':
+                    da_name = sys.argv[idx+1]
+                if sys.argv[idx] == 'da_type':
+                    da_type = sys.argv[idx+1]
+    if da_name == None or da_type == None:
+        print "DA: one of the parameters (<da_name>, <da_type>) is not specified"
+        return 1
+    da = DynAgent( da_name, da_type, ptf_csp )
     da.run( MainSM() )
 
     return 0

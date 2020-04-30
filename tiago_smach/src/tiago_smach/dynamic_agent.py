@@ -9,8 +9,8 @@ import rospy
 import smach
 import smach_ros
 from std_msgs.msg import String
-from multitasker.msg import Status, CMD
-from multitasker.srv import CostConditions, SuspendConditions
+from TaskER.msg import Status, CMD
+from TaskER.srv import CostConditions, SuspendConditions
 from tiago_smach.ros_node_utils import get_node_names
 import tiago_msgs.msg
 
@@ -48,11 +48,11 @@ class SuspendRequest:
         return self.req_data
 
 class DynAgent:
-    def __init__(self, name, taskType, ptf_csp):
+    def __init__(self, da_name, da_id, da_type, ptf_csp):
 
         global debug
         debug = True
-        self.name = name
+        self.name = da_name
         rospy.init_node(self.name)
         rospy.sleep(0.1)
         self.sub_task_state_cmd = rospy.Subscriber('/' + self.name + '/task_state_cmd', String, self.callbackTaskStateCmd)
@@ -62,8 +62,8 @@ class DynAgent:
         # assign ptf update state
         self.ptf_csp = ptf_csp
         # set DA_ID used by TaskER
-        self.da_ID = self.name
-        self.taskType = taskType
+        self.da_id = da_id
+        self.taskType = da_type
         self.exec_fsm_state = ""
         self.da_state = "init"
         self.terminateFlag = False
@@ -81,28 +81,36 @@ class DynAgent:
         print("\n","HOLD: ",str( data)+"\n")
         # propagate suspend request to exec FSM
         self.da_suspend_request.setData(data)
+        self.main_sm.request_preempt()
 
     def updateStatus(self):
         global debug
         my_status = Status()
-        # print("UPDATEING STATUS id: "+str(self.da_ID)+"\n")
-        my_status.da_id = self.da_ID
-        my_status.exec_state_name = self.exec_fsm_state
+        my_status.da_id = self.da_id
+        my_status.da_name = self.name
         my_status.da_state = self.da_state
         my_status.type = self.taskType
         my_status.schedule_params = self.ptf_csp(["scheduleParams", None])
         if debug:
-            print("UPDATEING STATUS params of: "+str(self.da_ID)+"\n"+str(my_status.schedule_params)+"\n")
+            print("UPDATEING STATUS params of: "+str(self.name)+"\n"+str(my_status.schedule_params)+"\n")
         self.pub_status.publish(my_status) 
         # print("STATUS was sent"+"\n")
     def cmd_handler(self, data):
         global debug
-        if data.cmd == "start":
-            self.startTask(data.data)
-        elif data.cmd == "susp":
-            self.suspTask(data.data)
-        elif data.cmd == "susp":
-            self.suspTask(data.data)
+        if data.recipient_name == self.name:
+            if data.cmd == "start":
+                # task will be started, so the interface to request start conditions by 'par' buffer is not required anymore
+                self.cost_cond_srv.shutdown()
+                self.startTask(data.data)
+            elif data.cmd == "susp":
+                self.susp_cond_srv.shutdown()
+                self.cost_cond_srv = rospy.Service(cost_cond_name, CostConditions, self.startConditionHandler)
+                self.suspTask(data.data)
+            elif data.cmd == "resume":
+                self.susp_cond_srv = rospy.Service(susp_cond_name, SuspendConditions, self.suspendConditionHandler)
+                self.da_suspend_request.setData("resume")
+            elif data.cmd == "terminate":
+                self.main_sm.shutdownRequest()
 
     def suspendConditionHandler(self, req):
         return self.ptf_csp(["suspendCondition",req])
@@ -141,9 +149,6 @@ class DynAgent:
                 ssm.on_shutdown()
                 return
             r.sleep()
-
-        # task will be started, so the interface to request start conditions by 'par' buffer is not required anymore
-        self.cost_cond_srv.shutdown()
         # setup suspend condition handler 
         susp_cond_name = node_namespace + "/get_suspend_conditions"
         self.susp_cond_srv = rospy.Service(susp_cond_name, SuspendConditions, self.suspendConditionHandler)
@@ -151,8 +156,6 @@ class DynAgent:
         self.main_sm.userdata.susp_data = self.da_suspend_request
         smach_thread = threading.Thread(target=self.main_sm.execute, args=(smach.UserData(),))
         smach_thread.start()
-        rospy.sleep(3)
-        self.da_suspend_request.setData("DUUUUPAAAA")
         print 'Smach thread is running'
 
         # Block until everything is preempted
@@ -198,10 +201,15 @@ class DynAgent:
                 # Publish diagnostic information
                 diag = tiago_msgs.msg.DynAgentDiag()
                 diag.agent_name = self.name
-                active_states = self.getActiveStates( self.main_sm )
-                for state_name, state_desc in active_states:
-                    diag.current_states.append( state_name )
-                    diag.descriptions.append( state_desc )
+                if self.startFlag:
+                    rospy.sleep(2) 
+                    active_states = self.getActiveStates( self.main_sm )
+                    for state_name, state_desc in active_states:
+                        diag.current_states.append( state_name )
+                        diag.descriptions.append( state_desc )
+                else:
+                    diag.current_states.append("init")
+                    diag.descriptions.append( "desc" )
                 self.pub_diag.publish( diag )
             except Exception as e:
                 print 'Detected exception in dynamic agent'
