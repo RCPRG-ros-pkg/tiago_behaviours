@@ -155,9 +155,9 @@ class TaskHarmonizer:
         args=[]
         for param_name, param_value in task_parameters.iteritems():
             args.append( param_name )
-            args.append( param_value )
-        self.tha.initialiseDA(executable=executable, args=args)
-        self.current_subprocess = subprocess.Popen( args )
+            args.append( param_value ) 
+        self.tha.initialiseDA(executable=executable, da_type=task_spec.task_name, args=args)
+        #self.current_subprocess = subprocess.Popen( args )
         self.current_task = (task_spec, task_parameters)
         self.current_task_cmd = rospy.Publisher('/' + task_spec.task_name + '/task_state_cmd', String, queue_size=10)
         rospy.sleep(0.1)

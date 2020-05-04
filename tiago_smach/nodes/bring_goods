@@ -18,14 +18,14 @@ from tiago_smach.task_manager import PoseDescription
 
 from pl_nouns.dictionary_client import DisctionaryServiceClient
 
-from multitasker.msg import RobotResource, ScheduleParams
+from TaskER.msg import RobotResource, ScheduleParams
 # for ExeSuspension state
 import subprocess
 
 class Cleanup(smach_rcprg.State):
-    def __init__(self, conversation_interface):
+    def __init__(self, conversation_interface, da_state_name):
         self.conversation_interface = conversation_interface
-
+        da_state_name = "Cleanup"
         smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'])
 
     def execute(self, userdata):
@@ -33,24 +33,35 @@ class Cleanup(smach_rcprg.State):
         print 'Cleanup.execute'
         self.conversation_interface.stop()
         return 'ok'
-class GetSuspension(smach_rcprg.State):
-    def __init__(self, conversation_interface):
-        self.conversation_interface = conversation_interface
 
+class GetSuspension(smach_rcprg.State):
+    def __init__(self, conversation_interface, da_state_name):
+        self.conversation_interface = conversation_interface
+        da_state_name = "GetSuspension"
         smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'], output_keys=['fsm_es_out'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'GetSuspend.execute'
         print "susp data: ", userdata.susp_data.getData()
-        userdata.fsm_es_out = userdata.susp_data.getData()
+        print "susp data[0]: ", userdata.susp_data.getData()[0]
+        data = userdata.susp_data.getData()
+        fsm_executable = None
+        for idx in range(2, len(data), 2):
+            print data[idx]
+            if data[idx] == 'executable':
+                fsm_executable = data[idx+1]
+        if fsm_executable == None:
+            print "harmoniser did not specified executable for suspension behaviour"
+        userdata.fsm_es_out = fsm_executable
         #srv.shutdown()
         rospy.sleep(5)
         return 'ok'
 
 class ExeSuspension(smach_rcprg.State):
-    def __init__(self, conversation_interface):
+    def __init__(self, conversation_interface, da_state_name):
         self.conversation_interface = conversation_interface
+        da_state_name = "ExeSuspension"
 
         smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'],input_keys=['fsm_es_in'])
 
@@ -66,8 +77,10 @@ class ExeSuspension(smach_rcprg.State):
         # or stdout, stderr = p.communicate()
         return 'ok'
 class Wait(smach_rcprg.State):
-    def __init__(self, conversation_interface):
+    def __init__(self, conversation_interface, da_state_name):
         self.conversation_interface = conversation_interface
+        da_state_name = "Wait"
+
 
         smach_rcprg.State.__init__(self, outcomes=['start', 'terminate'])
 
@@ -75,21 +88,29 @@ class Wait(smach_rcprg.State):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Wait.execute'
         #srv.shutdown()
-        while not userdata.susp_data.getData() == "resume":
+        fsm_cmd = None
+
+        while not fsm_cmd == "resume":
+            data = userdata.susp_data.getData()
+            for idx in range(0, len(data), 2):
+                print data[idx]
+                if data[idx] == 'cmd':
+                    fsm_cmd = data[idx+1]
             if self.preempt_requested():
                 return 'terminate'
             rospy.sleep(1)
         return 'start'
 
 class UpdateTask(smach_rcprg.State):
-    def __init__(self, conversation_interface):
+    def __init__(self, conversation_interface, da_state_name):
         self.conversation_interface = conversation_interface
-
+        da_state_name = "UpdateTask"
         smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'UpdateTask.execute'
+        rospy.sleep(3)
         #srv.shutdown()
         return 'ok'
 #
@@ -97,8 +118,8 @@ class UpdateTask(smach_rcprg.State):
 #
 
 class MainSM(smach_rcprg.StateMachine):
-    def __init__(self):
-        smach_rcprg.StateMachine.__init__(self, outcomes=['Finished', 'shutdown'], input_keys=[], output_keys=[])
+    def __init__(self, da_state_name):
+        smach_rcprg.StateMachine.__init__(self, da_state_name=da_state_name, outcomes=['Finished', 'shutdown'], input_keys=[], output_keys=[])
         places_xml_filename = rospy.get_param('/kb_places_xml')
         sim_mode = str(rospy.get_param('/sim_mode'))
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -144,23 +165,23 @@ class MainSM(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'goal', 'susp_data':'susp_data'})
             smach_rcprg.StateMachine.add('GetSuspension',
-                                    GetSuspension(self.conversation_interface),
+                                    GetSuspension(self.conversation_interface, da_state_name),
                                     transitions={'ok':'ExeSuspension', 'shutdown':'shutdown'},
                                     remapping={'susp_data':'susp_data', 'fsm_es_out':'fsm_es'})
             smach_rcprg.StateMachine.add('ExeSuspension',
-                                    ExeSuspension(self.conversation_interface),
+                                    ExeSuspension(self.conversation_interface, da_state_name),
                                     transitions={'ok':'Wait', 'shutdown':'shutdown'},
                                     remapping={'susp_data':'susp_data','fsm_es_in':'fsm_es'})
             smach_rcprg.StateMachine.add('Wait',
-                                    Wait(self.conversation_interface),
+                                    Wait(self.conversation_interface, da_state_name),
                                     transitions={'start':'UpdateTask', 'terminate':'Cleanup'},
                                     remapping={'susp_data':'susp_data'})
             smach_rcprg.StateMachine.add('UpdateTask',
-                                    UpdateTask(self.conversation_interface),
+                                    UpdateTask(self.conversation_interface, da_state_name),
                                     transitions={'ok':'ExecFSM', 'shutdown':'shutdown'},
                                     remapping={'susp_data':'susp_data'})
             smach_rcprg.StateMachine.add('Cleanup',
-                                    Cleanup(self.conversation_interface),
+                                    Cleanup(self.conversation_interface, da_state_name),
                                     transitions={'ok':'Finished', 'shutdown':'shutdown'},
                                     remapping={ })
 
@@ -178,16 +199,21 @@ def ptf_csp(ptf_id):
 def main():
     da_name = None
     da_type = None
+    da_id = None
+    da_state_name = []
     for idx in range(1, len(sys.argv), 2):
                 if sys.argv[idx] == 'da_name':
                     da_name = sys.argv[idx+1]
                 if sys.argv[idx] == 'da_type':
                     da_type = sys.argv[idx+1]
-    if da_name == None or da_type == None:
-        print "DA: one of the parameters (<da_name>, <da_type>) is not specified"
+                if sys.argv[idx] == 'da_id':
+                    da_id = sys.argv[idx+1]
+    if da_name == None or da_type == None or da_id == None:
+        print "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified"
         return 1
-    da = DynAgent( da_name, da_type, ptf_csp )
-    da.run( MainSM() )
+    da = DynAgent( da_name, da_id, da_type, ptf_csp, da_state_name )
+    print "RUN BRING"
+    da.run( MainSM( da_state_name) )
 
     return 0
 

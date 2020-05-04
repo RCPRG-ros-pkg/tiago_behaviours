@@ -3,7 +3,7 @@
 import smach
 
 class StateMachine(smach.StateMachine):
-    def __init__(self, outcomes, input_keys=[], output_keys=[]):
+    def __init__(self, outcomes=[], da_state_name=None, input_keys=[], output_keys=[]):
         # input_keys.append('susp_data')
         # output_keys.append('susp_data')
         # self.userdata.susp_data = ""
@@ -16,7 +16,7 @@ class StateMachine(smach.StateMachine):
             ch.shutdownRequest()
 
 class State(smach.State):
-    def __init__(self, outcomes=[], input_keys=[], output_keys=[], io_keys=[]):
+    def __init__(self, da_state_name=None, outcomes=[], input_keys=[], output_keys=[], io_keys=[]):
         input_keys.append('susp_data')
         output_keys.append('susp_data')
         smach.State.__init__(self, outcomes=outcomes,

@@ -17,7 +17,7 @@ import tiago_kb.places_xml as kb_p
 
 from tiago_smach.task_manager import PoseDescription
 
-from multitasker.msg import RobotResource, ScheduleParams
+from TaskER.msg import RobotResource, ScheduleParams
 
 class MainState(smach_rcprg.State):
     def __init__(self, conversation_interface):
@@ -87,7 +87,21 @@ def ptf_csp(ptf_id):
 
 
 def main():
-    da = DynAgent( 'idle', "myType_idle", ptf_csp )
+    da_name = None
+    da_type = None
+    da_id = None
+    da_state_name = []
+    for idx in range(1, len(sys.argv), 2):
+                if sys.argv[idx] == 'da_name':
+                    da_name = sys.argv[idx+1]
+                if sys.argv[idx] == 'da_type':
+                    da_type = sys.argv[idx+1]
+                if sys.argv[idx] == 'da_id':
+                    da_id = sys.argv[idx+1]
+    if da_name == None or da_type == None or da_id == None:
+        print "DA: one of the parameters (<da_name>, <da_type>, or <da_id>) is not specified"
+        return 1
+    da = DynAgent( da_name, da_id, da_type, ptf_csp,da_state_name )
     da.run( MainSM() )
 
     return 0
