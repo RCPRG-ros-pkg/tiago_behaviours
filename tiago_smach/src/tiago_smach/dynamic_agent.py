@@ -46,6 +46,8 @@ class SuspendRequest:
         self.req_data = data
     def getData(self):
         return self.req_data
+    def clearData(self):
+        self.req_data = []
 
 class DynAgent:
     def __init__(self, da_name, da_id, da_type, ptf_csp, da_state_name):
@@ -71,7 +73,7 @@ class DynAgent:
         # object to send suspend request to the current task stage
         self.da_suspend_request = SuspendRequest()
         self.da_suspend_request.setData(["cmd","","param_name", "suspension requirements from the task harmoniser"])
-
+        self.is_initialised = False
     
     def startTask(self,data):
         self.startFlag = True
@@ -85,7 +87,7 @@ class DynAgent:
 
     def updateStatus(self):
         global debug
-        if self.startFlag != True :
+        if self.is_initialised == False :
             self.da_state = ["init"]
         else:
             self.da_state = self.getActiveStates( self.main_sm )[0]
@@ -165,6 +167,9 @@ class DynAgent:
                 ssm.on_shutdown()
                 return
             r.sleep()
+        # setup introspection server for smach viewer
+        sis = smach_ros.IntrospectionServer(str("/"+self.name+"smach_view_server"), self.main_sm, self.name)
+        sis.start()
         # setup suspend condition handler 
         self.susp_cond_name = node_namespace + "/get_suspend_conditions"
         self.susp_cond_srv = rospy.Service(self.susp_cond_name, SuspendConditions, self.suspendConditionHandler)
@@ -173,10 +178,10 @@ class DynAgent:
         smach_thread = threading.Thread(target=self.main_sm.execute, args=(smach.UserData(),))
         smach_thread.start()
         print 'Smach thread is running'
+        self.is_initialised = True
 
         # Block until everything is preempted
         smach_thread.join()
-        self.finished = True
         thread_conn.join()
 
         print 'Smach thread is finished'
@@ -218,8 +223,8 @@ class DynAgent:
                 diag = tiago_msgs.msg.DynAgentDiag()
                 diag.agent_name = self.name
                 if self.startFlag:
-                    self.updateStatus()
                     rospy.sleep(2) 
+                    self.updateStatus()
                     active_states = self.getActiveStates( self.main_sm )
                     for state_name, state_desc in active_states:
                         diag.current_states.append( state_name )

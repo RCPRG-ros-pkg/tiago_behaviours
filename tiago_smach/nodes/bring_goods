@@ -38,7 +38,7 @@ class GetSuspension(smach_rcprg.State):
     def __init__(self, conversation_interface, da_state_name):
         self.conversation_interface = conversation_interface
         da_state_name = "GetSuspension"
-        smach_rcprg.State.__init__(self, outcomes=['ok', 'shutdown'], output_keys=['fsm_es_out'])
+        smach_rcprg.State.__init__(self, outcomes=['ok'], output_keys=['fsm_es_out'])
 
     def execute(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -52,8 +52,10 @@ class GetSuspension(smach_rcprg.State):
             if data[idx] == 'executable':
                 fsm_executable = data[idx+1]
         if fsm_executable == None:
-            print "harmoniser did not specified executable for suspension behaviour"
+            print "harmoniser did not specified executable for suspension behaviour, terminating task"
+            fsm_executable = "terminate task"
         userdata.fsm_es_out = fsm_executable
+        userdata.susp_data.clearData()
         #srv.shutdown()
         rospy.sleep(5)
         return 'ok'
@@ -70,6 +72,9 @@ class ExeSuspension(smach_rcprg.State):
         print 'ExecSuspension.execute'
         #srv.shutdown()
         print userdata.fsm_es_in
+        if userdata.fsm_es_in == "fsm_executable":
+            return 'shutdown'
+
         p = subprocess.Popen(userdata.fsm_es_in , shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # and you can block util the cmd execute finish
@@ -166,7 +171,7 @@ class MainSM(smach_rcprg.StateMachine):
                                     remapping={'goal':'goal', 'susp_data':'susp_data'})
             smach_rcprg.StateMachine.add('GetSuspension',
                                     GetSuspension(self.conversation_interface, da_state_name),
-                                    transitions={'ok':'ExeSuspension', 'shutdown':'shutdown'},
+                                    transitions={'ok':'ExeSuspension'},
                                     remapping={'susp_data':'susp_data', 'fsm_es_out':'fsm_es'})
             smach_rcprg.StateMachine.add('ExeSuspension',
                                     ExeSuspension(self.conversation_interface, da_state_name),
