@@ -32,9 +32,9 @@ def makePose(x, y, theta):
     result.orientation.w = q[3]
     return result
 
-class SayAskForGoods(smach_rcprg.TaskER.BlockingState):
+class SayAskForGoods(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['goods_name'], output_keys=['q_load_answer_id'],
+        smach_rcprg.State.__init__(self, input_keys=['goods_name'], output_keys=['q_load_answer_id'],
                              outcomes=['ok', 'preemption', 'timeout', 'error', 'shutdown', 'turn_around'])
 
         self.conversation_interface = conversation_interface
@@ -103,9 +103,9 @@ class SayAskForGoods(smach_rcprg.TaskER.BlockingState):
 
         raise Exception('Unreachable code')
 
-class SayTakeGoods(smach_rcprg.TaskER.BlockingState):
+class SayTakeGoods(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['goods_name', 'q_load_answer_id'],
+        smach_rcprg.State.__init__(self, input_keys=['goods_name', 'q_load_answer_id'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown', 'timeout', 'turn_around'])
 
         self.conversation_interface = conversation_interface
@@ -174,9 +174,9 @@ class SayTakeGoods(smach_rcprg.TaskER.BlockingState):
 
         raise Exception('Unreachable code')
 
-class SayIFinished(smach_rcprg.TaskER.BlockingState):
+class SayIFinished(smach_rcprg.State):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self,
+        smach_rcprg.State.__init__(self,
                              outcomes=['ok', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -192,7 +192,7 @@ class SayIFinished(smach_rcprg.TaskER.BlockingState):
             return 'shutdown'
         return 'ok'
 
-class BringGoods(smach_rcprg.StateMachine):
+class BringGoods_tasker(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, input_keys=['goal','susp_data'], output_keys=['susp_data'],
                                         outcomes=['PREEMPTED',
@@ -276,8 +276,7 @@ class BringGoods(smach_rcprg.StateMachine):
 
             smach_rcprg.StateMachine.add('SayIFinished', SayIFinished(sim_mode, conversation_interface),
                                     transitions={'ok':'FINISHED', 'shutdown':'shutdown'})
-    def my_exe(self):
-        pass
+
     # def execute(self, userdata):
     #     while not rospy.is_shutdown():
     #         print "GOODS: ", userdata.susp_data.getData()

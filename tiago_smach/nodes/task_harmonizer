@@ -4,6 +4,7 @@
 import rospkg
 import sys
 import subprocess
+import threading
 
 import rosgraph
 import rospy
@@ -38,6 +39,8 @@ class TaskHarmonizer:
         self.current_subprocess = None
         self.current_task = None
         self.current_task_cmd = None
+
+        self.task_request_response = None
 
         print 'ConversationMachine.__init__: waiting for rico_says ActionServer...'
         #self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
@@ -88,10 +91,12 @@ class TaskHarmonizer:
 
     def spin(self):
         while not rospy.is_shutdown():
+            queue = self.tha.getQueue()
+            [interrupting, executing] = self.tha.getInterruptingAndExecuting()
             if not self.pending_task_request is None:
-                if self.canRunTask( self.pending_task_request[0] ):
-                    self.abortCurrentTask()
+                if True:
                     self.runTask( self.pending_task_request[0], self.pending_task_request[1] )
+                    self.pending_task_request = None
                 else:
                     print 'Cannot run task "' + self.pending_task_request[0].task_name + '"'
                     goal = tiago_msgs.msg.SaySentenceGoal()
@@ -99,18 +104,14 @@ class TaskHarmonizer:
                     print(goal)
                     #self.rico_says_client.wait_for_result()
 
-                self.pending_task_request = None
-            elif self.current_subprocess is None:
+            
+            elif len(queue) == 0 and self.tha.isExecuting() != True and self.tha.isInterrupting() != True:
+                print "len(queue): ", len(queue)
+                print "self.tha.isExecuting", self.tha.isExecuting()
+                print "self.tha.isInterrupting", self.tha.isInterrupting()
                 # There is nothing running, so run the default behaviour
-                if self.hasTaskSpecByIntent('default'):
-                    default_task_spec = self.getTaskSpecByIntent('default')
-                    if self.canRunTask( default_task_spec ):
-                        self.runTask( default_task_spec, {} )
-            else:
-                if not self.current_subprocess.poll() is None:
-                    print 'Task "' + self.current_task[0].task_name + '" has finished'
-                    self.current_subprocess = None
-                    self.current_task = None
+                default_task_spec = self.getTaskSpecByIntent('default')
+                self.pending_task_request = (default_task_spec, {})
             if self.cant_hear_you:
                 goal = tiago_msgs.msg.SaySentenceGoal()
                 goal.sentence = 'niekorzystne warunki pogodowe nie słyszę'
@@ -146,9 +147,11 @@ class TaskHarmonizer:
         self.current_task_cmd = None
 
     def canRunTask(self, task_spec):
+        return task_spec.priority > self.current_task[0].priority
         return self.current_task is None or task_spec.priority > self.current_task[0].priority
 
     def runTask(self, task_spec, task_parameters):
+        da_id = self.tha.getNextID()
         self.checkForDynamicAgentsRunning()
         print 'Running task "' + task_spec.task_name + '", parameters: ' + str(task_parameters)
         executable = self.cached_rapps_path + '/' + task_spec.task_name
@@ -156,10 +159,24 @@ class TaskHarmonizer:
         for param_name, param_value in task_parameters.iteritems():
             args.append( param_name )
             args.append( param_value ) 
-        self.tha.initialiseDA(executable=executable, da_type=task_spec.task_name, args=args)
+        self.tha.initialiseDA(executable=executable, da_type=task_spec.task_name,  da_id=da_id, args=args)
         #self.current_subprocess = subprocess.Popen( args )
-        self.current_task = (task_spec, task_parameters)
-        self.current_task_cmd = rospy.Publisher('/' + task_spec.task_name + '/task_state_cmd', String, queue_size=10)
+        self.shdl_performed = False
+        while not self.shdl_performed ==True:
+            rospy.sleep(0.1)
+        [interrupting, executing] = self.tha.getInterruptingAndExecuting()
+        if self.tha.isExecuting():
+            if da_id == executing["da_id"]:
+                print "The requested task is running"
+                return
+        if self.tha.isInterrupting():
+            if da_id == interrupting["da_id"]:
+                print "The requested task will be started after suspension"
+            else:
+                print "Another task awaits as interrupting agent"
+                print "The requested task awaits in the queue"
+        else:
+            print "The requested task awaits in the queue"
         rospy.sleep(0.1)
 
     def checkForDynamicAgentsRunning(self):
@@ -169,11 +186,12 @@ class TaskHarmonizer:
                 if '/' + task_spec.task_name == node_name:
                     #raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
                     pass
-    def scheduler():
+    def scheduler(self):
         while True:
             cost_file = open("./TH_cost", "a+")
             print "\n SCHEDULING \n"
             self.tha.schedule_new(cost_file)
+            self.shdl_performed=True
             print "\n SCHEDULED \n"
             rospy.sleep(2)
             if self._FINISH:
@@ -181,13 +199,14 @@ class TaskHarmonizer:
                 cost_file.close()
                 break
 
-    def switcher():
+    def switcher(self):
         while True:
             print "\n SWITCHING \n"
             self.tha.switchDA()
             if self._FINISH:
                 break
-
+def shdl_function():
+    pass
 def main():
     rospy.init_node('rico_task_harmonizer')
     rospy.sleep(0.5)
@@ -198,12 +217,12 @@ def main():
     # TODO: read map of intents to tasks from file downloaded from cloud (RAPP Store)
     # intent_name -> (task_name, task_param_names)
     tasks_spec_list = [
-        TaskSpec('projects/incare-dialog-agent/agent/intents/176ab2ca-6250-4227-985b-cc82d5497d9f', 'bring_goods', 5, ['przedmiot']),
+        TaskSpec('projects/incare-dialog-agent/agent/intents/176ab2ca-6250-4227-985b-cc82d5497d9f', 'bring_goods_tasker', 5, ['przedmiot']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/0165eceb-9621-4a7d-aecc-7a879951da18', 'move_to', 5, ['miejsce']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/7acd4325-4cdd-4e15-99be-ad545f4dddd5', 'stop', 10, []),
         TaskSpec('projects/incare-dialog-agent/agent/intents/d9e96166-030b-442f-a513-d3fa2e044030', 'wander', 5, []),
         TaskSpec('intent_call', 'call', 1, ['miejsce']),
-        TaskSpec('default', 'idle', 0, []),
+        TaskSpec('default', 'idle_tasker', 0, []),
         # TESTS:
         TaskSpec('test_bring_goods', 'test_bring_goods', 0, ['przedmiot']),
         TaskSpec('test_move_to', 'test_move_to', 0, ['miejsce']),
@@ -214,12 +233,13 @@ def main():
     rospack = rospkg.RosPack()
     cached_rapps_path = rospack.get_path('tiago_smach') + '/nodes'
     th = TaskHarmonizer(tha, ['rico_cmd'], tasks_spec_list, cached_rapps_path)
-    # scheduler = threading.Thread(target = th.scheduler)
-    # scheduler.start()
-    # switcher = threading.Thread(target = th.switcher)
-    # switcher.start()
+    scheduler = threading.Thread(target = th.scheduler)
+    scheduler.start()
+    switcher = threading.Thread(target = th.switcher)
+    switcher.start()
     th.spin()
-
+    switcher.join()
+    scheduler.join()
 if __name__ == '__main__':
     main()
 

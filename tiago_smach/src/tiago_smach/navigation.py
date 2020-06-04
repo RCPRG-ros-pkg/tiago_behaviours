@@ -21,6 +21,7 @@ import pl_nouns.odmiana as ro
 import smach_rcprg
 import tiago_torso_controller
 from task_manager import PoseDescription
+# import smach_rcprg.TaskER
 
 NAVIGATION_MAX_TIME_S = 100
 
@@ -36,9 +37,9 @@ def makePose(x, y, theta):
     result.orientation.z = q[3]
     return result
 
-class RememberCurrentPose(smach_rcprg.State):
+class RememberCurrentPose(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode):
-        smach_rcprg.State.__init__(self, output_keys=['current_pose'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, output_keys=['current_pose'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -89,9 +90,9 @@ class RememberCurrentPose(smach_rcprg.State):
                 return 'shutdown'
             return 'error'
 
-class UnderstandGoal(smach_rcprg.State):
+class UnderstandGoal(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, kb_places):
-        smach_rcprg.State.__init__(self, input_keys=['in_current_pose', 'goal_pose'], output_keys=['move_goal'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['in_current_pose', 'goal_pose'], output_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         assert sim_mode in ['sim', 'gazebo', 'real']
@@ -197,9 +198,9 @@ class UnderstandGoal(smach_rcprg.State):
         userdata.move_goal = result
         return 'ok'
 
-class SetHeight(smach_rcprg.State):
+class SetHeight(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['torso_height'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['torso_height'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -237,9 +238,9 @@ class SetHeight(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class SayImGoingTo(smach_rcprg.State):
+class SayImGoingTo(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -266,9 +267,9 @@ class SayImGoingTo(smach_rcprg.State):
 
         return 'ok'
 
-class SayIdontKnow(smach_rcprg.State):
+class SayIdontKnow(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['move_goal'],
                              outcomes=['ok', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -293,9 +294,9 @@ class SayIdontKnow(smach_rcprg.State):
 
         return 'ok'
 
-class SayIArrivedTo(smach_rcprg.State):
+class SayIArrivedTo(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.State.__init__(self, input_keys=['move_goal'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['move_goal'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.conversation_interface = conversation_interface
@@ -320,7 +321,7 @@ class SayIArrivedTo(smach_rcprg.State):
         #self.conversation_interface.addSpeakSentence( 'Dojechałem do pozycji ' + str(pose.position.x) + ', ' + str(pose.position.y) )
         return 'ok'
 
-class SetNavParams(smach_rcprg.State):
+class SetNavParams(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.sim_mode = sim_mode
@@ -347,7 +348,7 @@ class SetNavParams(smach_rcprg.State):
             else:
                 raise Exception('Local planner "' + self.local_planner_name + '" is not supported.')
 
-        smach_rcprg.State.__init__(self, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['max_lin_vel_in', 'max_lin_accel_in'],
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.description = u'Zmieniam parametry ruchu'
@@ -392,7 +393,7 @@ class SetNavParams(smach_rcprg.State):
             return 'shutdown'
         return 'ok'
 
-class MoveTo(smach_rcprg.State):
+class MoveTo(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
@@ -402,7 +403,7 @@ class MoveTo(smach_rcprg.State):
         self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.State.__init__(self,
+        smach_rcprg.TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
                              input_keys=['move_goal'])
 
@@ -536,7 +537,7 @@ class MoveTo(smach_rcprg.State):
         # Do nothing
         return
 
-class TurnAround(smach_rcprg.State):
+class TurnAround(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
@@ -546,7 +547,7 @@ class TurnAround(smach_rcprg.State):
         self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.State.__init__(self,
+        smach_rcprg.TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
                              input_keys=['current_pose'])
 
@@ -683,7 +684,7 @@ class TurnAround(smach_rcprg.State):
         # Do nothing
         return
 
-class ClearCostMaps(smach_rcprg.State):
+class ClearCostMaps(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode):
         assert sim_mode in ['sim', 'gazebo', 'real']
         if sim_mode == 'sim':
@@ -696,7 +697,7 @@ class ClearCostMaps(smach_rcprg.State):
             #    print "Service call failed: %s"%e
             #    self.clear_costmaps = None
 
-        smach_rcprg.State.__init__(self,
+        smach_rcprg.TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'shutdown'])
 
         self.description = u'Czyszczę mapę kosztów'
