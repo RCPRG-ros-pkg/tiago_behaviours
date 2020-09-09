@@ -41,7 +41,7 @@ class SayAskForGoods(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Proszę o podanie rzeczy'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         assert isinstance(userdata.goods_name, unicode)
@@ -111,7 +111,7 @@ class SayTakeGoods(smach_rcprg.TaskER.BlockingState):
         self.conversation_interface = conversation_interface
         self.description = u'Proszę o odebranie rzeczy'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         assert isinstance(userdata.goods_name, unicode)
@@ -183,7 +183,7 @@ class SayIFinished(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Mówię, że zakończyłem'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe zakończyłem zadanie' )
@@ -227,7 +227,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('MoveToKitchen', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'SetHeightLow', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
-                                    remapping={'goal':'kitchen_pose'})
+                                    remapping={'goal':'kitchen_pose', 'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('SetHeightLow', navigation.SetHeight(sim_mode, conversation_interface),
                                     transitions={'ok':'AskForGoods', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -242,7 +242,7 @@ class BringGoods(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('MoveBack', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'SayTakeGoods', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
                                     'shutdown':'shutdown'},
-                                    remapping={'goal':'initial_pose'})
+                                    remapping={'goal':'initial_pose', 'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('SayTakeGoods', SayTakeGoods(sim_mode, conversation_interface),
                                     transitions={'ok':'SetHeightEnd', 'preemption':'PREEMPTED', 'error': 'FAILED',

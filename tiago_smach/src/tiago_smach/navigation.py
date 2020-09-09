@@ -56,7 +56,7 @@ class RememberCurrentPose(smach_rcprg.TaskER.BlockingState):
         self.current_pose = copy.copy(data)
         self.__lock__.release()
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if self.sim_mode == 'sim':
@@ -101,7 +101,7 @@ class UnderstandGoal(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Próbuję zrozumieć zadany cel'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         #assert isinstance( userdata.goal_pose, PoseDescription )
@@ -211,7 +211,7 @@ class SetHeight(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Zmieniam wysokość'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if self.sim_mode == 'sim':
@@ -247,7 +247,7 @@ class SayImGoingTo(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Mówię dokąd jadę'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         pose = userdata.move_goal.parameters['pose']
@@ -276,7 +276,7 @@ class SayIdontKnow(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Mówię, że nie wiem o co chodzi'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.parameters['place_name']
@@ -303,7 +303,7 @@ class SayIArrivedTo(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Mówię, że dojechałem do celu'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         pose = userdata.move_goal.parameters['pose']
@@ -353,7 +353,7 @@ class SetNavParams(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Zmieniam parametry ruchu'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if self.sim_mode == 'sim':
@@ -393,7 +393,7 @@ class SetNavParams(smach_rcprg.TaskER.BlockingState):
             return 'shutdown'
         return 'ok'
 
-class MoveTo(smach_rcprg.TaskER.BlockingState):
+class MoveTo(smach_rcprg.TaskER.SuspendableState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
@@ -403,13 +403,13 @@ class MoveTo(smach_rcprg.TaskER.BlockingState):
         self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.TaskER.BlockingState.__init__(self,
+        smach_rcprg.TaskER.SuspendableState.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
-                             input_keys=['move_goal'])
+                             input_keys=['move_goal', 'susp_data'])
 
         self.description = u'Jadę'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         place_name = userdata.move_goal.parameters['place_name']
@@ -422,7 +422,7 @@ class MoveTo(smach_rcprg.TaskER.BlockingState):
 
         if self.sim_mode == 'sim':
             for i in range(50):
-                if self.preempt_requested():
+                if self.is_suspension_flag() != None:
                     self.conversation_interface.removeAutomaticAnswer(answer_id)
                     self.service_preempt()
                     return 'preemption'
@@ -473,7 +473,7 @@ class MoveTo(smach_rcprg.TaskER.BlockingState):
                     client.cancel_all_goals()
                     return 'stall'
 
-                if self.preempt_requested():
+                if self.is_suspension_flag() != None:
                     self.conversation_interface.removeAutomaticAnswer(answer_id)
                     client.cancel_all_goals()
                     self.service_preempt()
@@ -553,7 +553,7 @@ class TurnAround(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Odwracam się'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         pose = userdata.current_pose.parameters['pose']
@@ -702,7 +702,7 @@ class ClearCostMaps(smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Czyszczę mapę kosztów'
 
-    def execute(self, userdata):
+    def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if not self.clear_costmaps is None:
@@ -720,7 +720,7 @@ class ClearCostMaps(smach_rcprg.TaskER.BlockingState):
 class MoveToComplex(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, outcomes=['FINISHED', 'PREEMPTED', 'FAILED', 'shutdown'],
-                                            input_keys=['goal'])
+                                            input_keys=['goal', 'susp_data'])
 
         self.description = u'Jadę do określonego miejsca'
 
@@ -743,7 +743,7 @@ class MoveToComplex(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
                                     'shutdown':'shutdown'},
-                                    remapping={'move_goal':'move_goal'})
+                                    remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -758,13 +758,13 @@ class MoveToComplex(smach_rcprg.StateMachine):
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-#    def execute(self, userdata):
+#    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
 #            self.description = u'Gdzieś jadę'
 #        else:
 #            place_name = userdata.goal.parameters['place_name']
 #            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
-#        return super(MoveToComplex, self).execute(userdata)
+#        return super(MoveToComplex, self).transition_function(userdata)
 
 class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
@@ -799,7 +799,7 @@ class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
             smach_rcprg.StateMachine.add('MoveTo', MoveTo(sim_mode, conversation_interface),
                                     transitions={'ok':'SayIArrivedTo', 'preemption':'PREEMPTED', 'error': 'FAILED', 'stall':'ClearCostMaps',
                                     'shutdown':'shutdown'},
-                                    remapping={'move_goal':'move_goal'})
+                                    remapping={'move_goal':'move_goal', 'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('ClearCostMaps', ClearCostMaps(sim_mode),
                                     transitions={'ok':'MoveTo', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -814,10 +814,10 @@ class MoveToComplexTorsoMid(smach_rcprg.StateMachine):
                                     transitions={'ok':'FAILED', 'shutdown':'shutdown'},
                                     remapping={'move_goal':'move_goal'})
 
-#    def execute(self, userdata):
+#    def transition_function(self, userdata):
 #        if not 'place_name' in userdata.goal.parameters or userdata.goal.parameters['place_name'] is None:
 #            self.description = u'Gdzieś jadę'
 #        else:
 #            place_name = userdata.goal.parameters['place_name']
 #            self.description = u'Jadę do {"' + place_name + u'", dopelniacz}'
-#        return super(MoveToComplexTorsoMid, self).execute(userdata)
+#        return super(MoveToComplexTorsoMid, self).transition_function(userdata)

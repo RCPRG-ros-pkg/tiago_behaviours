@@ -69,7 +69,7 @@ class TaskER(StateMachine):
                                     TaskER.Cleanup(self, da_state_name),
                                     transitions={'ok':'Finished', 'shutdown':'shutdown'},
                                     remapping={ })
-    
+
     def swap_state(self, label, state):
         """Add a state to the opened state machine.
         
@@ -127,13 +127,14 @@ class TaskER(StateMachine):
         def execute(self, userdata):
             fsm_executable = self.tasker_instance.get_suspension_tf(userdata.susp_data)
             userdata.fsm_es_out = fsm_executable
-            userdata.susp_data.clearData()
+            # userdata.susp_data.clearData()
             #srv.shutdown()
-            rospy.sleep(5)
+            # rospy.sleep(5)
             return 'ok'
 
     class BlockingState(State):
         def __init__(self, outcomes=[], input_keys=[], output_keys=[], io_keys=[]):
+            self._userdata = None
 
             State.__init__(self, outcomes=outcomes,
                                         input_keys=input_keys,
@@ -141,30 +142,64 @@ class TaskER(StateMachine):
                                         io_keys=io_keys)
 
         def execute(self, userdata):
-            return State.execute(userdata)
+            self._userdata = userdata
+            return self.transition_function(userdata)
+        def transition_function(self, userdata):
+            pass
+
         def request_preempt(self):
             print "got PREEEMPT SIGNAL IN BLOCKING STATE"
-            pass
+            fsm_cmd = None
+            data = self._userdata.susp_data.req_data
+            for idx in range(0, len(data), 2):
+                if data[idx] == 'cmd':
+                    fsm_cmd = data[idx+1]
+            print "FSM CMD: ", fsm_cmd
+            if fsm_cmd == 'susp':
+                pass
+            elif fsm_cmd == 'terminate':
+                return self.request_preempt()
+
+        def is_suspension_flag(self):
+            fsm_cmd = None
+            if not self._userdata == None:
+                data = self._userdata.susp_data.req_data
+                for idx in range(0, len(data), 2):
+                    if data[idx] == 'cmd':
+                        fsm_cmd = data[idx+1]
+                if fsm_cmd == 'terminate':
+                    return fsm_cmd
+                else:
+                    return None   
+            else:
+                return None
+
     class SuspendableState(State):
-        def __init__(self, outcomes=[], input_keys=[], output_keys=[]):
-            
+        def __init__(self, outcomes=[], input_keys=[], output_keys=[], io_keys=[]):
+            self._userdata = None
             State.__init__(self, outcomes=outcomes,
                                         input_keys=input_keys,
                                         output_keys=output_keys,
                                         io_keys=io_keys)
 
         def execute(self, userdata):
-            return State.execute(userdata)
+            self._userdata = userdata
+            return self.transition_function(userdata)
+        def transition_function(self, userdata):
+            pass
         def is_suspension_flag(self):
             fsm_cmd = None
-            data = self.userdata.susp_data.getData()
-            for idx in range(0, len(data), 2):
-                print data[idx]
-                if data[idx] == 'cmd':
-                    fsm_cmd = data[idx+1]
-            if fsm_cmd == 'susp':
-                return 'terminate'
-            pass
+            if not self._userdata == None:
+                data = self._userdata.susp_data.req_data
+                for idx in range(0, len(data), 2):
+                    if data[idx] == 'cmd':
+                        fsm_cmd = data[idx+1]
+                if fsm_cmd == 'susp' or fsm_cmd == 'terminate':
+                    return fsm_cmd
+                else:
+                    return None   
+            else:
+                return None
 
     class ExeSuspension(State):
         def __init__(self, tasker_instance, da_state_name):
@@ -192,17 +227,18 @@ class TaskER(StateMachine):
             #srv.shutdown()
             fsm_cmd = None
 
-            while not fsm_cmd == "start":
+            while not fsm_cmd == "resume":
                 data = userdata.susp_data.getData()
+                print "WAIT.data: ", data
                 for idx in range(0, len(data), 2):
                     print data[idx]
                     if data[idx] == 'cmd':
                         fsm_cmd = data[idx+1]
-                if self.preempt_requested():
+                if self.preempt_requested() or fsm_cmd == 'terminate':
                     return 'terminate'
-                active_ros_nodes = get_node_names()
-                if not '/rico_task_harmonizer' in active_ros_nodes:
-                    return 'terminate'
+                # active_ros_nodes = get_node_names()
+                # if not '/rico_task_harmonizer' in active_ros_nodes:
+                #     return 'terminate'
                 rospy.sleep(1)
             return 'start'
 
@@ -219,6 +255,19 @@ class TaskER(StateMachine):
             rospy.sleep(3)
             #srv.shutdown()
             return 'ok'
+        def is_suspension_flag(self):
+            fsm_cmd = None
+            if not self._userdata == None:
+                data = self._userdata.susp_data.req_data
+                for idx in range(0, len(data), 2):
+                    if data[idx] == 'cmd':
+                        fsm_cmd = data[idx+1]
+                if fsm_cmd == 'susp' or fsm_cmd == 'terminate':
+                    return fsm_cmd
+                else:
+                    return None   
+            else:
+                return None
 
     class Initialise(State):
         def __init__(self, tasker_instance, da_state_name):

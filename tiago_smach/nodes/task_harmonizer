@@ -195,13 +195,13 @@ class TaskHarmonizer:
             print "\n SCHEDULED \n"
             rospy.sleep(2)
             if self._FINISH:
-                self.tha.sendIndicator()
+                switch_priority = "hard"
+                self.tha.sendIndicator(switch_priority)
                 cost_file.close()
                 break
 
     def switcher(self):
         while True:
-            print "\n SWITCHING \n"
             self.tha.switchDA()
             if self._FINISH:
                 break
@@ -217,7 +217,7 @@ def main():
     # TODO: read map of intents to tasks from file downloaded from cloud (RAPP Store)
     # intent_name -> (task_name, task_param_names)
     tasks_spec_list = [
-        TaskSpec('projects/incare-dialog-agent/agent/intents/176ab2ca-6250-4227-985b-cc82d5497d9f', 'bring_goods_tasker', 5, ['przedmiot']),
+        TaskSpec('BG', 'bring_goods_tasker', 5, ['przedmiot']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/0165eceb-9621-4a7d-aecc-7a879951da18', 'move_to', 5, ['miejsce']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/7acd4325-4cdd-4e15-99be-ad545f4dddd5', 'stop', 10, []),
         TaskSpec('projects/incare-dialog-agent/agent/intents/d9e96166-030b-442f-a513-d3fa2e044030', 'wander', 5, []),

@@ -16,7 +16,8 @@ import tiago_msgs.msg
 from std_srvs.srv import Trigger, TriggerRequest
 
 class SmachShutdownManager:
-    def __init__(self, main_sm, list_asw, list_sis):
+    def __init__(self, dyn_agent, main_sm, list_asw, list_sis):
+        self.__dyn_agent__ = dyn_agent
         self.__main_sm__ = main_sm
         self.__list_asw__ = list_asw
         self.__list_sis__ = list_sis
@@ -36,9 +37,7 @@ class SmachShutdownManager:
 
             asw.wrapped_container.request_preempt()
 
-        # Stop the main SM
-        print 'SmachShutdownManager.on_shutdown: stopping the main SM'
-        self.__main_sm__.request_preempt()
+        
 
         #rospy.sleep(2.0)
 class SuspendRequest:
@@ -76,7 +75,7 @@ class DynAgent:
         self.da_suspend_request = SuspendRequest()
         self.da_suspend_request.setData(["cmd","","param_name", "suspension requirements from the task harmoniser"])
         self.is_initialised = False
-    
+
     def startTask(self,data):
         self.startFlag = True
         self.da_suspend_request.setData(data)
@@ -85,7 +84,7 @@ class DynAgent:
         print("\n","HOLD: ",str( data)+"\n")
         # propagate suspend request to exec FSM
         self.da_suspend_request.setData(data)
-        self.main_sm.request_preempt()
+        # self.main_sm.request_preempt()
 
     def updateStatus(self):
         global debug
@@ -124,12 +123,16 @@ class DynAgent:
                 self.suspTask(fsm_data)
             elif data.cmd == "resume" and self.da_state[0] == "Wait":
                 self.start_service.shutdown()
+                self.cost_cond_srv.shutdown()
                 self.hold_service = rospy.Service(self.node_namespace+"/hold_now", Trigger, lambda : None )
                 self.susp_cond_srv = rospy.Service(self.susp_cond_name, SuspendConditions, self.suspendConditionHandler)
                 fsm_data = ["cmd", "resume"]
                 fsm_data.extend(data.data)
                 self.da_suspend_request.setData(fsm_data)
             elif data.cmd == "terminate":
+                fsm_data = ["cmd", "terminate"]
+                fsm_data.extend(data.data)
+                self.da_suspend_request.setData(fsm_data)
                 self.main_sm.shutdownRequest()
 
     def suspendConditionHandler(self, req):
@@ -148,7 +151,7 @@ class DynAgent:
 
         # sis = smach_ros.IntrospectionServer(str("/"+self.name+"smach_view_server"), self.main_sm, self.name)
         # sis.start()
-        ssm = SmachShutdownManager(self.main_sm, [], [])
+        ssm = SmachShutdownManager(self, self.main_sm, [], [])
         # setup status interface for the task harmoniser
         self.pub_status = rospy.Publisher('TH/statuses', Status, queue_size=10)
         # subsribe to commands from the task harmoniser 
@@ -223,8 +226,10 @@ class DynAgent:
         while not self.finished:
             active_ros_nodes = get_node_names()
             if not '/rico_task_harmonizer' in active_ros_nodes:
-                print 'DynAgent "' + self.name + '" received has detected the task_harmonizer is dead'
+                print 'DynAgent "' + self.name + '" detected the task_harmonizer is dead'
                 self.finished = True
+                fsm_data = ["cmd", "terminate"]
+                self.suspTask(fsm_data)
                 self.main_sm.shutdownRequest()
                 break
 
