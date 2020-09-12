@@ -15,7 +15,7 @@ from tiago_smach.dynamic_agent_tasker import DynAgent
 
 from tiago_smach.task_manager import PoseDescription
 
-from pl_nouns.dictionary_client import DisctionaryServiceClient
+# from pl_nouns.dictionary_client import DisctionaryServiceClient
 
 from TaskER.msg import RobotResource, ScheduleParams
 from TaskER.srv import SuspendConditionsRequest, SuspendConditionsResponse
