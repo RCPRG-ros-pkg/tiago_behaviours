@@ -11,7 +11,7 @@ import tiago_smach.conversation
 import tiago_smach.smach_rcprg as smach_rcprg
 from tiago_smach.dynamic_agent_tasker import DynAgent
 
-import tiago_kb.places_xml as kb_p
+# import tiago_kb.places_xml as kb_p
 
 from tiago_smach.task_manager import PoseDescription
 
@@ -161,7 +161,8 @@ class MyTaskER(smach_rcprg.TaskER):
 
         # imp.reload(tiago_smach.bring_goods)
         print "SWAPPING"
-        self.swap_state('ExecFSM', MainState(self.conversation_interface))
+        # self.swap_state('ExecFSM', MainState(self.conversation_interface))
+        self.swap_state('ExecFSM', MainState())
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
