@@ -74,12 +74,12 @@ def ptf_csp(ptf_id):
 
 class MyTaskER(smach_rcprg.TaskER):
     def __init__(self,da_state_name, da_name):
-        self.name = da_name
+        self.name = unicode(da_name)
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
         smach_rcprg.TaskER.__init__(self,da_state_name)
-        self.sis = smach_ros.IntrospectionServer(str("/"+self.name+"smach_view_server"), self, self.name)
+        self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
         self.sis.start()
         # places_xml_filename = rospy.get_param('/kb_places_xml')
         self.sim_mode = str(rospy.get_param('/sim_mode'))
@@ -105,6 +105,7 @@ class MyTaskER(smach_rcprg.TaskER):
         print ("my-tasker -----------------------   shutdown")
         # self.conversation_interface.stop()
         self.sis.stop()
+        self.sis.clear()
         self.request_preempt()
 
     def cleanup_tf(self):
@@ -127,9 +128,18 @@ class MyTaskER(smach_rcprg.TaskER):
             print data[idx]
             if data[idx] == 'executable':
                 fsm_executable = data[idx+1]
+            elif data[idx] == 'rosrun':
+                ros_pkg = data[idx+1]
+                ros_exec = data[idx+2]
+                fsm_executable = "rosrun "+ros_pkg+" "+ros_exec
         if fsm_executable == None:
             print "harmoniser did not specified executable for suspension behaviour, terminating task"
             fsm_executable = "terminate task"
+        #
+        # overrite ExeSusp state given by THA
+        #
+        # fsm_executable = 'rosrun tiago_smach suspend_gh'
+        
         return fsm_executable
 
     def exe_suspension_tf(self,fsm_es_in):
@@ -147,7 +157,7 @@ class MyTaskER(smach_rcprg.TaskER):
             p = subprocess.Popen(fsm_es_in , shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             # and you can block util the cmd execute finish
             p.wait()
-        return "ok"
+        return "FINISHED"
     def wait_tf(self):
         print "My TASKER -- wait_tf"
         print "My TASKER"
@@ -158,6 +168,7 @@ class MyTaskER(smach_rcprg.TaskER):
         print "My TASKER"
         print "My TASKER"
         self.sis.stop()
+        self.sis.clear()
 
         # imp.reload(tiago_smach.bring_goods)
         print "SWAPPING"

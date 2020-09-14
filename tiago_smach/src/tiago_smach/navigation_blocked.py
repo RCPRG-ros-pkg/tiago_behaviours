@@ -163,8 +163,6 @@ class UnderstandGoal(smach_rcprg.TaskER.BlockingState):
                 if pl.getType() == 'point':
                     pt_dest = pl.getPt()
                     norm = pl.getN()
-                    print "NORM_0: ", norm[0]
-                    print "NORM_1: ", norm[1]
                     angle_dest = -math.atan2(norm[1], norm[0])
                     pt = pt_dest
                     pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
@@ -395,7 +393,7 @@ class SetNavParams(smach_rcprg.TaskER.BlockingState):
             return 'shutdown'
         return 'ok'
 
-class MoveTo(smach_rcprg.TaskER.SuspendableState):
+class MoveTo(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface):
         assert sim_mode in ['sim', 'gazebo', 'real']
         self.current_pose = Pose()
@@ -405,7 +403,7 @@ class MoveTo(smach_rcprg.TaskER.SuspendableState):
         self.sim_mode = sim_mode
         self.conversation_interface = conversation_interface
 
-        smach_rcprg.TaskER.SuspendableState.__init__(self,
+        smach_rcprg.TaskER.BlockingState.__init__(self,
                              outcomes=['ok', 'preemption', 'error', 'stall', 'shutdown'],
                              input_keys=['move_goal', 'susp_data'])
 
@@ -429,7 +427,7 @@ class MoveTo(smach_rcprg.TaskER.SuspendableState):
                     self.service_preempt()
                     return 'preemption'
 
-                rospy.sleep(0.2)
+                rospy.sleep(0.1)
             self.conversation_interface.removeAutomaticAnswer(answer_id)
             return 'ok'
         else:

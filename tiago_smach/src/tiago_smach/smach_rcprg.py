@@ -55,7 +55,7 @@ class TaskER(StateMachine):
                                     remapping={'susp_data':'susp_data', 'fsm_es_out':'fsm_es'})
             StateMachine.add('ExeSuspension',
                                     TaskER.ExeSuspension(self,da_state_name),
-                                    transitions={'ok':'Wait', 'shutdown':'shutdown'},
+                                    transitions={'FINISHED':'Wait', 'shutdown':'shutdown'},
                                     remapping={'susp_data':'susp_data','fsm_es_in':'fsm_es'})
             StateMachine.add('Wait',
                                     TaskER.Wait(self,da_state_name),
@@ -201,12 +201,12 @@ class TaskER(StateMachine):
             else:
                 return None
 
-    class ExeSuspension(State):
+    class ExeSuspension(StateMachine):
         def __init__(self, tasker_instance, da_state_name):
             self.tasker_instance = tasker_instance
             da_state_name = "ExeSuspension"
 
-            State.__init__(self, outcomes=['ok', 'shutdown'],input_keys=['fsm_es_in'])
+            StateMachine.__init__(self, outcomes=['FINISHED', 'shutdown'],input_keys=['fsm_es_in'])
 
         def execute(self, userdata):
             transition_name = self.tasker_instance.exe_suspension_tf(userdata.fsm_es_in)

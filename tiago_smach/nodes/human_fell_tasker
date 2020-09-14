@@ -8,7 +8,7 @@ import smach
 import smach_ros
 
 import tiago_smach.conversation
-import tiago_smach.bring_goods
+import tiago_smach.human_fell
 import tiago_smach.smach_rcprg as smach_rcprg
 from tiago_smach.dynamic_agent_tasker import DynAgent
 
@@ -202,7 +202,7 @@ class MainSM(smach_rcprg.StateMachine):
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
     if ptf_id[0] == "scheduleParams":
-        return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
+        return ScheduleParams(cost = 10, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
         req = ptf_id[1]
@@ -213,12 +213,12 @@ def ptf_csp(ptf_id):
         return CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)
 class MyTaskER(smach_rcprg.TaskER):
     def __init__(self,da_state_name, da_name):
-        self.name = da_name
+        self.name = unicode(da_name)
         self.sim_mode = None
         self.conversation_interface = None
         self.kb_places = None
         smach_rcprg.TaskER.__init__(self,da_state_name)
-        self.sis = smach_ros.IntrospectionServer(str("/"+self.name+"smach_view_server"), self, self.name)
+        self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
         self.sis.start()
         places_xml_filename = rospy.get_param('/kb_places_xml')
         self.sim_mode = str(rospy.get_param('/sim_mode'))
@@ -236,11 +236,12 @@ class MyTaskER(smach_rcprg.TaskER):
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ])
-        self.my_fsm = tiago_smach.bring_goods.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places)
+        self.my_fsm = tiago_smach.human_fell.HumanFell(self.sim_mode, self.conversation_interface, self.kb_places)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
         self.sis.stop()
+        self.sis.clear()
     def cleanup_tf(self):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         print 'Cleanup.execute'
@@ -261,6 +262,10 @@ class MyTaskER(smach_rcprg.TaskER):
             print data[idx]
             if data[idx] == 'executable':
                 fsm_executable = data[idx+1]
+            elif data[idx] == 'rosrun':
+                ros_pkg = data[idx+1]
+                ros_exec = data[idx+2]
+                fsm_executable = "rosrun "+ros_pkg+" "+ros_exec
         if fsm_executable == None:
             print "harmoniser did not specified executable for suspension behaviour, terminating task"
             fsm_executable = "terminate task"
@@ -292,10 +297,11 @@ class MyTaskER(smach_rcprg.TaskER):
         print "My TASKER"
         print "My TASKER"
         self.sis.stop()
+        self.sis.clear()
 
-        imp.reload(tiago_smach.bring_goods)
+        imp.reload(tiago_smach.human_fell)
         print "SWAPPING"
-        self.swap_state('ExecFSM', tiago_smach.bring_goods.BringGoods(self.sim_mode, self.conversation_interface, self.kb_places))
+        self.swap_state('ExecFSM', tiago_smach.human_fell.HumanFell(self.sim_mode, self.conversation_interface, self.kb_places))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
@@ -306,22 +312,21 @@ class MyTaskER(smach_rcprg.TaskER):
 
         goods_name = None
         for idx in range(1, len(sys.argv), 2):
-            if sys.argv[idx] == 'przedmiot':
-                goods_name = sys.argv[idx+1]
+            if sys.argv[idx] == 'human_name':
+                human_name = sys.argv[idx+1]
+        if human_name is None:
+            raise Exception('Argument "human_name" is missing in argv: ' + str(sys.argv))      
 
-        if goods_name is None:
-            raise Exception('Argument "goods_name" is missing in argv: ' + str(sys.argv))        
+        # if isinstance(goods_name, str):
+        #     goods_name = goods_name.decode('utf-8')
+        # goods_name = goods_name.encode('utf-8').decode('utf-8')
 
-        if isinstance(goods_name, str):
-            goods_name = goods_name.decode('utf-8')
-        goods_name = goods_name.encode('utf-8').decode('utf-8')
-
-        dictionary = DisctionaryServiceClient()
-        goods_name_m = dictionary.getCases(goods_name).getCase('mianownik')
+        # dictionary = DisctionaryServiceClient()
+        # goods_name_m = dictionary.getCases(goods_name).getCase('mianownik')
 
         self.conversation_interface.start()
 
-        self.userdata.goal = goods_name_m
+        self.userdata.human_name = human_name
         self.userdata.fsm_es = ""
 def main():
     da_name = None
