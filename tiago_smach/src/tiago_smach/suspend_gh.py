@@ -121,8 +121,14 @@ class ExcuseHuman(tiago_smach.smach_rcprg.TaskER.BlockingState):
 
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przepraszam Cię '+human_name+u' , mam pilne zadanie. Jadę ratować czlowieka, zaraz wracam.' )
+        if self.sim_mode in ['sim', 'gazebo']:
+            mc = self.kb_places.getMapContext('sim')
+        elif self.sim_mode == 'real':
+            mc = self.kb_places.getMapContext('real')
+        else:
+            raise Exception('<suspend_gh> I dont know the map context you use: "' + self.sim_mode + '". I know <sim> and <gazebo> and <real>.')
 
-        mc = self.kb_places.getMapContext('sim')
+
         place_id = unicode(userdata.human_name+"_awaiting")
         pose = userdata.current_pose.parameters['pose']
         theta, beta, alpha = euler_from_quaternion( (pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z) )
