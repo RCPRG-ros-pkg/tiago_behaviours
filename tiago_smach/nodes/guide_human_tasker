@@ -212,6 +212,13 @@ def ptf_csp(ptf_id):
         req = CostConditionsRequest()
         req = ptf_id[1]
         return CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)
+class Greeted():
+    def __init__(self):
+        self.value = False
+    def set(self, trigger):
+        self.value = trigger
+    def get(self):
+        return self.value
 class MyTaskER(smach_rcprg.TaskER):
     def __init__(self,da_state_name, da_name):
         self.name = unicode(da_name)
@@ -237,7 +244,7 @@ class MyTaskER(smach_rcprg.TaskER):
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ], self.sim_mode)
-        self.greeted = False
+        self.greeted = Greeted()
         self.my_fsm = tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places, self.greeted)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
@@ -307,7 +314,7 @@ class MyTaskER(smach_rcprg.TaskER):
         print "My TASKER -- wait_tf"
         print "My TASKER"
         print "My TASKER"
-        self.greeted = self.userdata.greeted
+        print "GREEEEETEEEED: ", self.greeted
         pass
     def update_task_tf(self):
         print "My TASKER -- update_task_tf"

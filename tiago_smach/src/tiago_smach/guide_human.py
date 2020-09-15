@@ -62,14 +62,17 @@ class SetHumanAndDestination(smach_rcprg.TaskER.BlockingState):
         return 'ok'
 
 class IntroduceTask(smach_rcprg.TaskER.BlockingState):
-    def __init__(self, sim_mode, conversation_interface):
-        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['greeted','human_name', 'guide_destination'], output_keys=['greeted'],
+    def __init__(self, sim_mode, conversation_interface, greeted):
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=['human_name', 'guide_destination'], output_keys=[],
                              outcomes=['ok', 'preemption', 'error', 'timeout', 'shutdown'])
-
+        print "INTRO INIT"
         self.conversation_interface = conversation_interface
 
         self.description = u'Nawiązuję interakcję'
+        self.greeted = greeted
     def transition_function(self, userdata):
+        print "INTRO EXE"
+
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         gender = ""
@@ -83,14 +86,15 @@ class IntroduceTask(smach_rcprg.TaskER.BlockingState):
 
         dictionary = DisctionaryServiceClient()
         guide_dest_b = dictionary.getCases(guide_destination).getCase('dopelniacz')
-        if not userdata.greeted:
+        print "LAST GREEEETED: ", self.greeted.get()
+        if not self.greeted.get():
             self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dzień dobry, '+gender+u' udać się do ' + guide_dest_b + u', proszę podążać za mną.' )
         else:
             self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przepraszam za przerwanie, już możemy kontynuować' )
 
         if self.__shutdown__:
             return 'shutdown'
-	userdata.greeted = True
+        self.greeted.set(True)
         return 'ok'
 
 class Goodbye(smach_rcprg.TaskER.BlockingState):
@@ -287,7 +291,7 @@ class SayIFinished(smach_rcprg.TaskER.BlockingState):
 
 class GuideHuman(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places,greeted):
-        smach_rcprg.StateMachine.__init__(self, input_keys=['human_name','guide_destination','susp_data'], output_keys=['susp_data','greeted'],
+        smach_rcprg.StateMachine.__init__(self, input_keys=['human_name','guide_destination','susp_data'], output_keys=['susp_data'],
                                         outcomes=['PREEMPTED',
                                                     'FAILED',
                                                     'FINISHED', 'shutdown'])
@@ -298,7 +302,7 @@ class GuideHuman(smach_rcprg.StateMachine):
         self.userdata.lowest_height = 0.0
 
         self.description = u'Podaję rzecz'
-        self.userdata.greeted = greeted
+        self.greeted = greeted
         with self:
             smach_rcprg.StateMachine.add('SetHeightMid', navigation.SetHeight(sim_mode, conversation_interface),
                                     transitions={'ok':'SetHumanAndDestination', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -320,10 +324,10 @@ class GuideHuman(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'goal':'human_pose', 'susp_data':'susp_data'})
 
-            smach_rcprg.StateMachine.add('IntroduceTask', IntroduceTask(sim_mode, conversation_interface),
+            smach_rcprg.StateMachine.add('IntroduceTask', IntroduceTask(sim_mode, conversation_interface, self.greeted),
                                     transitions={'ok':'MoveToDestination', 'preemption':'PREEMPTED', 'error':'FAILED',
                                     'timeout':'IntroduceTask','shutdown':'shutdown', },
-                                    remapping={'greeted':'greeted', 'human_name':'human_name', 'guide_destination':'guide_destination'})
+                                    remapping={'human_name':'human_name', 'guide_destination':'guide_destination'})
 
             smach_rcprg.StateMachine.add('MoveToDestination', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
                                     transitions={'FINISHED':'Goodbye', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
