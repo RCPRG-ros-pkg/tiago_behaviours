@@ -96,7 +96,7 @@ class SayIFinished(tiago_smach.smach_rcprg.TaskER.BlockingState):
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe zakończyłem zadanie' )
+  #      self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe zakończyłem zadanie' )
 
         if self.__shutdown__:
             return 'shutdown'
@@ -111,7 +111,7 @@ class ExcuseHuman(tiago_smach.smach_rcprg.TaskER.BlockingState):
 
         self.description = u'Przepraszam człowieka. Mówię, że zaraz wracam'
         self.kb_places = kb_places
-
+        self.sim_mode = sim_mode
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 

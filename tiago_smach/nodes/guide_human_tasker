@@ -237,7 +237,8 @@ class MyTaskER(smach_rcprg.TaskER):
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ], self.sim_mode)
-        self.my_fsm = tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places)
+        self.greeted = False
+        self.my_fsm = tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places, self.greeted)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -306,6 +307,7 @@ class MyTaskER(smach_rcprg.TaskER):
         print "My TASKER -- wait_tf"
         print "My TASKER"
         print "My TASKER"
+        self.greeted = self.userdata.greeted
         pass
     def update_task_tf(self):
         print "My TASKER -- update_task_tf"
@@ -316,7 +318,7 @@ class MyTaskER(smach_rcprg.TaskER):
 
         imp.reload(tiago_smach.guide_human)
         print "SWAPPING"
-        self.swap_state('ExecFSM', tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places))
+        self.swap_state('ExecFSM', tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places,self.greeted))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
