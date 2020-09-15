@@ -4,6 +4,7 @@
 import sys
 
 import rospy
+import rospkg
 import smach
 import smach_ros
 
@@ -269,7 +270,15 @@ class MyTaskER(smach_rcprg.TaskER):
         # if fsm_executable == None:
         #     print "harmoniser did not specified executable for suspension behaviour, terminating task"
         #     fsm_executable = "terminate task"
-        mod = imp.load_source("SuspGH","/home/wojciech/tiago_public_ws/src/rcprg/tiago_behaviours/tiago_smach/src/tiago_smach/suspend_gh.py")
+        # get an instance of RosPack with the default search paths
+        rospack = rospkg.RosPack()
+
+        # list all packages, equivalent to rospack list
+        rospack.list() 
+
+        # get the file path for rospy_tutorials
+        ts_path = rospack.get_path('tiago_smach')
+        mod = imp.load_source("SuspGH",ts_path+"/src/tiago_smach/suspend_gh.py")
         self.sis.stop()
         self.sis.clear()
         self.swap_state(u'ExeSuspension', mod.SuspGH(self.sim_mode, self.conversation_interface, self.kb_places))
