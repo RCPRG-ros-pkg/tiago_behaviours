@@ -20,15 +20,16 @@ import actionlib
 #
 class ConversationMachine:
     # item_types is [(query_name, intent_name)]
-    def __init__(self, item_types):
+    def __init__(self, item_types, sim_mode):
         self.__item_types__ = item_types
         self.__stop__ = False
         self.__intent_list__ = set()
         self.__intent_list_lock__ = threading.Lock()
-
+        self.__sim_mode = sim_mode
         print 'ConversationMachine.__init__: waiting for rico_says ActionServer...'
-        #self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
-        #self.rico_says_client.wait_for_server()
+	if self.__sim_mode == 'real':
+            self.rico_says_client = actionlib.SimpleActionClient('rico_says', tiago_msgs.msg.SaySentenceAction)
+            self.rico_says_client.wait_for_server()
         print 'ConversationMachine.__init__: connected to rico_says ActionServer'
 
         self.sub = rospy.Subscriber("rico_filtered_cmd", tiago_msgs.msg.Command, self.__callbackRicoCmd__)
@@ -165,8 +166,10 @@ class ConversationMachine:
         print 'Rico says (blocking): "' + text + '"'
         goal = tiago_msgs.msg.SaySentenceGoal()
         goal.sentence = text
+        if self.__sim_mode == 'real':
+            self.rico_says_client.send_goal(goal)
+            self.rico_says_client.wait_for_result()
         print(goal)
-        #self.rico_says_client.wait_for_result()
         print 'Rico says (blocking) finished'
 
     # Starts speaking a sentence, returns id for polling
@@ -212,7 +215,7 @@ class ConversationMachine:
 #
 # The SM that govenrs the highest-level conversation.
 #
-'''
+
 class HearState(smach_rcprg.State):
     def __init__(self, conversation_interface):
         smach_rcprg.State.__init__(self, output_keys=[],
@@ -480,4 +483,4 @@ class ConversationInterface:
         for answer_id, text in self.__automatic_answers_name_map__[name].iteritems():
             result.append(text)
         return result
-'''
+
