@@ -201,12 +201,12 @@ class TaskER(StateMachine):
             else:
                 return None
 
-    class ExeSuspension(StateMachine):
+    class ExeSuspension(State):
         def __init__(self, tasker_instance, da_state_name):
             self.tasker_instance = tasker_instance
             da_state_name = "ExeSuspension"
 
-            StateMachine.__init__(self, outcomes=['FINISHED', 'shutdown'],input_keys=['fsm_es_in'])
+            State.__init__(self, outcomes=['FINISHED', 'shutdown'],input_keys=['fsm_es_in'])
 
         def execute(self, userdata):
             transition_name = self.tasker_instance.exe_suspension_tf(userdata.fsm_es_in)
@@ -284,7 +284,7 @@ class TaskER(StateMachine):
                     print data[idx]
                     if data[idx] == 'cmd':
                         fsm_cmd = data[idx+1]
-                if self.preempt_requested():
+                if self.preempt_requested() or fsm_cmd == 'terminate':
                     return 'terminate'
                 rospy.sleep(1)
             return 'ok'

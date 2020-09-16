@@ -45,7 +45,7 @@ class MainState(smach_rcprg.TaskER.SuspendableState):
                 # self.conversation_interface.removeAutomaticAnswer(answer1_id)
                 # self.conversation_interface.removeAutomaticAnswer(answer2_id)
                 # self.conversation_interface.stop()
-                self.service_preempt()
+                # self.service_preempt()
                 return 'PREEMPTED'
 
             if self.__shutdown__:
@@ -61,6 +61,10 @@ class MainState(smach_rcprg.TaskER.SuspendableState):
 
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
+    terminate_flag = rospy.get_param('/term_ID')
+    if terminate_flag:
+        print "IDLE: SELF terminate"
+        return 'self-terminate'
     if ptf_id[0] == "scheduleParams":
         return ScheduleParams(cost = 0, completion_time=1000,cost_per_sec=0,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":

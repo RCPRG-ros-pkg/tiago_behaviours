@@ -10,6 +10,7 @@ import smach_ros
 
 import tiago_smach.conversation
 import tiago_smach.guide_human
+import tiago_smach.gh_csp
 import tiago_smach.smach_rcprg as smach_rcprg
 from tiago_smach.dynamic_agent_tasker import DynAgent
 
@@ -202,8 +203,10 @@ class MainSM(smach_rcprg.StateMachine):
         print "handling suspension with data: ", data
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
+
     if ptf_id[0] == "scheduleParams":
-        return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
+        return self.csp_handler.get_schedule_params("stand",guide_dest)
+        # return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
         req = ptf_id[1]
@@ -246,6 +249,17 @@ class MyTaskER(smach_rcprg.TaskER):
             ], self.sim_mode)
         self.greeted = Greeted()
         self.my_fsm = tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places, self.greeted)
+        human_name = None
+        for idx in range(1, len(sys.argv), 2):
+            if sys.argv[idx] == 'human_name':
+                human_name = sys.argv[idx+1]
+            if sys.argv[idx] == 'guide_destination':
+                guide_destination = sys.argv[idx+1]
+
+        if human_name is None:
+            raise Exception('Argument "human_name" is missing in argv: ' + str(sys.argv))   
+
+        self.csp_handler = tiago_smach.gh_csp.GH_csp(human_name)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()

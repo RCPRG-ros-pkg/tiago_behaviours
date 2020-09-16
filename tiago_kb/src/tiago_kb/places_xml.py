@@ -145,7 +145,7 @@ class MapContext:
             raise Exception('Two places with the same id: "' + pl_id + '"')
         if not self.getPlaceByName( name ) is None:
             raise Exception('Two places with the same name: "' + name + '"')
-        assert img.shape == self.__map__.getImage().shape
+    
         self.__volumetric_places__.append(
                 VolumetricPlace(pl_id, name, img, self.__map__.getOrigin(), self.__map__.getResolution()) )
 
@@ -155,6 +155,21 @@ class MapContext:
         if not self.getPlaceByName( name ) is None:
             raise Exception('Two places with the same name: "' + name + '"')
         self.__point_places__.append( PointPlace(pl_id, name, position, front_vec) )
+
+    def updatePointPlace(self, pl_id, name,position, front_vec):
+        if self.getPlaceById( pl_id ) is None:
+            raise Exception('There are no such place. Cannot remove it. Place_id: "' + pl_id + '"')
+        for pl in self.__point_places__:
+            if pl.getId() == pl_id:
+                pl =  PointPlace(pl_id, name, position, front_vec)
+
+    def updateVolumetricPlace(self, pl_id, name, img):
+        assert img.shape == self.__map__.getImage().shape
+        if self.getPlaceById( pl_id ) is None:
+            raise Exception('There are no such place. Cannot remove it. Place_id: "' + pl_id + '"')
+        for pl in self.__volumetric_places__:
+            if pl.getId() == pl_id:
+                pl=VolumetricPlace(pl_id, name, img, self.__map__.getOrigin(), self.__map__.getResolution()) 
 
 class KBPlaces:
     def __init__(self):

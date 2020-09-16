@@ -67,10 +67,10 @@ class DynAgent:
         self.da_id = int(da_id)
         self.taskType = da_type
         self.exec_fsm_state = ""
-        self.da_state = da_state_name
+        self.da_state = ["init"]
         self.terminateFlag = False
         self.startFlag = False
-        self.ptf_csp(["scheduleParams", None])
+        # self.process_ptf_csp(["scheduleParams", None])
         # object to send suspend request to the current task stage
         self.da_suspend_request = SuspendRequest()
         self.da_suspend_request.setData(["cmd","","param_name", "suspension requirements from the task harmoniser"])
@@ -85,26 +85,55 @@ class DynAgent:
         # propagate suspend request to exec FSM
         self.da_suspend_request.setData(data)
         # self.main_sm.request_preempt()
-
+    def terminateDA(self):
+        if not self.terminateFlag == True:
+            if self.da_state[0] == "init" or self.getActiveStates( self.main_sm )[0][0] == "Wait":
+                self.cmd_handler(CMD(recipient_name=self.name,cmd="terminate"))
+                my_status = Status()
+                my_status.da_id = self.da_id
+                my_status.da_name = self.name
+                my_status.type = self.taskType
+                self.da_state = ["END"]
+                my_status.da_state = self.da_state
+                self.pub_status.publish(my_status) 
+                self.terminateFlag = True
+            else:
+                print "self-termination is allowed only in Init and Wait state"
+        else:
+            print "termination flag was already handled"
+    def process_ptf_csp(self, req):
+        result = self.ptf_csp(req)
+        if result == 'self-terminate':
+            print "DA_tasker: SELF terminate"
+            self.terminateDA()
+            return 'self-terminate'
+        else:
+            return result
     def updateStatus(self):
         global debug
         if self.is_initialised == False :
-            self.da_state = ["init"]
+            self.da_state = ['init']
         else:
+            print "update, states: ", self.getActiveStates( self.main_sm )
             self.da_state = self.getActiveStates( self.main_sm )[0]
 
         my_status = Status()
         my_status.da_id = self.da_id
         my_status.da_name = self.name
-        my_status.da_state = self.da_state
         my_status.type = self.taskType
-        my_status.schedule_params = self.ptf_csp(["scheduleParams", None])
+        result = self.process_ptf_csp(["scheduleParams", None])
+        if result != 'self-terminate':
+            my_status.schedule_params = result
+        else:
+            return
+        my_status.da_state = self.da_state
         if debug:
             print("UPDATEING STATUS params of: "+str(self.name)+"\n of "+ str( self.taskType)+" type \n"+str(my_status.schedule_params)+"\n")
         self.pub_status.publish(my_status) 
         # print("STATUS was sent"+"\n")
     def cmd_handler(self, data):
         global debug
+        print "DA got CMD: ", data
         if data.recipient_name == self.name:
             if data.cmd == "start":
                 # task will be started, so the interface to request start conditions by 'par' buffer is not required anymore
@@ -133,12 +162,13 @@ class DynAgent:
                 fsm_data = ["cmd", "terminate"]
                 fsm_data.extend(data.data)
                 self.da_suspend_request.setData(fsm_data)
+                self.main_sm.request_preempt()
                 self.main_sm.shutdownRequest()
 
     def suspendConditionHandler(self, req):
-        return self.ptf_csp(["suspendCondition",req])
+        return self.process_ptf_csp(["suspendCondition",req])
     def startConditionHandler(self, req):
-        return self.ptf_csp(["startCondition",req])
+        return self.process_ptf_csp(["startCondition",req])
 
     def run(self, main_sm, sis=None):
         self.main_sm = main_sm
@@ -176,14 +206,19 @@ class DynAgent:
         smach_thread = threading.Thread(target=self.main_sm.execute, args=(smach.UserData(),))
         smach_thread.start()
         # wait for start signal
-        r = rospy.Rate(2)                
+        r = rospy.Rate(1)                
         self.start_service = rospy.Service(self.node_namespace+"/startTask", Trigger, lambda : None )
         while not rospy.is_shutdown():
+            print "RUNNING"
             self.updateStatus()
             if self.startFlag:
                 break 
             if self.terminateFlag:
+                print "RUNNING: TERM FLAG"
+                self.start_service.shutdown()
                 ssm.on_shutdown()
+                smach_thread.join()
+                thread_conn.join()
                 return
             r.sleep()
         self.start_service.shutdown()
@@ -194,8 +229,10 @@ class DynAgent:
         self.susp_cond_srv = rospy.Service(self.susp_cond_name, SuspendConditions, self.suspendConditionHandler)
         # Block until everything is preempted
         smach_thread.join()
+        print "SMACH JOINED"
         thread_conn.join()
-        self.finished = True
+        print "CONN Joined"
+        self.terminateFlag = True
         print 'Smach thread is finished'
         ssm.on_shutdown()
         print "DYN AGENT ENDED"
@@ -204,7 +241,7 @@ class DynAgent:
         print 'DynAgent.callback'
         if data.data == 'abort':
             print 'DynAgent "' + self.name + '" received abort command'
-            self.finished = True
+            self.terminateFlag = True
             self.main_sm.shutdownRequest()
 
     def getActiveStates(self, sm):
@@ -223,24 +260,25 @@ class DynAgent:
         return result
 
     def connectionCheckThread(self, args):
-        while not self.finished:
+        while not self.terminateFlag:
             active_ros_nodes = get_node_names()
             if not '/rico_task_harmonizer' in active_ros_nodes:
                 print 'DynAgent "' + self.name + '" detected the task_harmonizer is dead'
-                self.finished = True
+                self.terminateFlag = True
                 fsm_data = ["cmd", "terminate"]
                 self.suspTask(fsm_data)
+                self.main_sm.request_preempt()
                 self.main_sm.shutdownRequest()
                 break
 
             try:
-                # Publish diagnostic information
+                # Publish diagnostic information 
                 diag = tiago_msgs.msg.DynAgentDiag()
                 diag.agent_name = self.name
                 if self.startFlag:
                     rospy.sleep(2) 
-                    self.updateStatus()
-                    active_states = self.getActiveStates( self.main_sm )
+                    self.updateStatus() 
+                    active_states = self.getActiveStates( self.main_sm ) 
                     for state_name, state_desc in active_states:
                         diag.current_states.append( state_name )
                         diag.descriptions.append( state_desc )
@@ -251,7 +289,8 @@ class DynAgent:
             except Exception as e:
                 print 'Detected exception in dynamic agent'
                 print e
-                self.finished = True
+                self.terminateFlag = True
+                self.main_sm.request_preempt()
                 self.main_sm.shutdownRequest()
                 break
 

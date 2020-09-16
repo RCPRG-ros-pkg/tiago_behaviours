@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+# encoding: utf8
+
+import math
+import rospy
+
+from move_base_msgs.msg import *
+from tf.transformations import quaternion_from_euler
+from geometry_msgs.msg import Pose
+
+
+import task_manager
+
+from TaskER.msg import RobotResource, ScheduleParams
+from nav_msgs.srv import *
+from nav_msgs.msg import *
+
+
+import tiago_kb.places_xml as kb_p
+from tiago_smach.task_manager import PoseDescription
+
+class UpdateRobotPose():
+    def __init__(self, sim_mode, kb_places, robot_name):
+        self.sim_mode = sim_mode
+        self.kb_places = kb_places
+        self.robot_name = robot_name
+
+    def update_robot_pose():
+        if self.sim_mode in ['sim', 'gazebo']:
+            mc = self.kb_places.getMapContext('sim')
+        elif self.sim_mode == 'real':
+            mc = self.kb_places.getMapContext('real')
+        else:
+            raise Exception('<update_robot_pose> I dont know the map context you use: "' + self.sim_mode + '". I know <sim> and <gazebo> and <real>.')
+
+        while not rospy.is_shutdown():
+            try:
+                listener.waitForTransform('/map', '/base_link', ros_time, rospy.Duration(8.0))
+                (robot_trans,robot_rot) = listener.lookupTransform('/map', '/base_link', ros_time)
+                
+                if len(robot_trans) != 0:
+                    break
+            except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                rate.sleep()
+                continue
+        math.tan(theta)
+        x = math.cos(theta)
+        y = math.sin(theta)
+        place_id = unicode(self.robot_name)
+        mc.updatePointPlace(place_id, place_id, robot_trans, [x, y])
