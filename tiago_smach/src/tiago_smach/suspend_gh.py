@@ -72,11 +72,11 @@ class CheckHumanState(tiago_smach.smach_rcprg.TaskER.BlockingState):
         else:
             gender = "powinna Pani"
         if isinstance(userdata.human_name, str):
-            human_name = userdata.human_name.decode('utf-8')
-        human_name = human_name.encode('utf-8').decode('utf-8')
+            userdata.human_name = userdata.human_name.decode('utf-8')
+        userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
 
 
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe '+human_name+u', jak się czujesz?' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe '+userdata.human_name+u', jak się czujesz?' )
         rospy.sleep(2)
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dziękuję za informację. Dowidzenia.x' )
         if self.__shutdown__:
@@ -116,31 +116,17 @@ class ExcuseHuman(tiago_smach.smach_rcprg.TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if isinstance(userdata.human_name, str):
-            human_name = userdata.human_name.decode('utf-8')
-        human_name = human_name.encode('utf-8').decode('utf-8')
+            userdata.human_name = userdata.human_name.decode('utf-8')
+        userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
 
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przepraszam Cię '+human_name+u' , mam pilne zadanie. Jadę ratować czlowieka, zaraz wracam.' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przepraszam Cię '+userdata.human_name+u' , mam pilne zadanie. Jadę ratować czlowieka, zaraz wracam.' )
         if self.sim_mode in ['sim', 'gazebo']:
             mc = self.kb_places.getMapContext('sim')
         elif self.sim_mode == 'real':
             mc = self.kb_places.getMapContext('real')
         else:
             raise Exception('<suspend_gh> I dont know the map context you use: "' + self.sim_mode + '". I know <sim> and <gazebo> and <real>.')
-
-
-        place_id = unicode(userdata.human_name+"_awaiting")
-        pose = userdata.current_pose.parameters['pose']
-        theta, beta, alpha = euler_from_quaternion( (pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z) )
-        position =  [float(pose.position.x)-float(math.cos(theta)), float(pose.position.y)-float(math.sin(-theta))]
-        front_vec = [float(math.cos(theta)), float(math.sin(-theta))]
-
-        mc.addPointPlace(place_id, place_id, position, front_vec)
-        print "ADDED POSE <"+place_id+">:"
-        print "\tPosition: ", mc.getPlaceById(place_id).getPt()
-        print "\tPosition_calc: ", position
-        print "\tN: ", mc.getPlaceById(place_id).getN()
-        print "\tN_calc: ", front_vec
 
         if self.__shutdown__:
             return 'shutdown'

@@ -32,11 +32,19 @@ def parsePointStr(point_str):
     assert len(fields) == 2
     return ( float(fields[0]), float(fields[1]) )
 
+def str2bool(v):
+  return v.lower() in ("yes", "true", "t", "1")
+
 class VolumetricPlace:
     def __init__(self, pl_id, name, img, origin, res):
         self.__pl_id__  = pl_id
         self.__eimg__ = ei.EmbeddedImage(img, origin, res)
         self.__name__  = name
+
+    def update(self, pl_id, name, img, origin, res):
+        self.__pl_id__  = pl_id
+        self.__eimg__ = ei.EmbeddedImage(img, origin, res)
+        self.__name__  = name   
 
     def getType(self):
         return 'volumetric'
@@ -56,14 +64,25 @@ class VolumetricPlace:
                                 eimg.getOrigin(), eimg.getResolution())
 
 class PointPlace:
-    def __init__(self, pl_id, name, pt, n):
+    def __init__(self, pl_id, name, pt, n, face_place):
         self.__pl_id__  = pl_id
         self.__name__  = name
         self.__pt__ = pt
         self.__n__ = n
+        self.__face_place__ = face_place
+
+    def update(self, pl_id, name, pt, n, face_place):
+        self.__pl_id__  = pl_id
+        self.__name__  = name
+        self.__pt__ = pt
+        self.__n__ = n
+        self.__face_place__ = face_place 
 
     def getType(self):
         return 'point'
+
+    def isDestinationFace(self):
+        return self.__face_place__
 
     def getId(self):
         return self.__pl_id__
@@ -80,7 +99,7 @@ class PointPlace:
     def getTransformed(self, tf):
         tf_pt = transforms.transformPoint(self.__pt__, tf)
         tf_n = transforms.transformVector(self.__n__, tf)
-        return PointPlace( self.__pl_id__, self.__name__, tf_pt, tf_n)
+        return PointPlace( self.__pl_id__, self.__name__, tf_pt, tf_n, self.__face_place__)
 
 class MapContext:
     def __init__(self, name, resolution, origin, map_img):
@@ -149,19 +168,20 @@ class MapContext:
         self.__volumetric_places__.append(
                 VolumetricPlace(pl_id, name, img, self.__map__.getOrigin(), self.__map__.getResolution()) )
 
-    def addPointPlace(self, pl_id, name, position, front_vec):
+    def addPointPlace(self, pl_id, name, position, front_vec, face_place):
         if not self.getPlaceById( pl_id ) is None:
             raise Exception('Two places with the same id: "' + pl_id + '"')
         if not self.getPlaceByName( name ) is None:
             raise Exception('Two places with the same name: "' + name + '"')
-        self.__point_places__.append( PointPlace(pl_id, name, position, front_vec) )
+        self.__point_places__.append( PointPlace(pl_id, name, position, front_vec, face_place) )
 
     def updatePointPlace(self, pl_id, name,position, front_vec):
         if self.getPlaceById( pl_id ) is None:
             raise Exception('There are no such place. Cannot remove it. Place_id: "' + pl_id + '"')
         for pl in self.__point_places__:
             if pl.getId() == pl_id:
-                pl =  PointPlace(pl_id, name, position, front_vec)
+                face_place = pl.isDestinationFace()
+                pl.update(pl_id, name, position, front_vec, face_place)
 
     def updateVolumetricPlace(self, pl_id, name, img):
         assert img.shape == self.__map__.getImage().shape
@@ -169,7 +189,7 @@ class MapContext:
             raise Exception('There are no such place. Cannot remove it. Place_id: "' + pl_id + '"')
         for pl in self.__volumetric_places__:
             if pl.getId() == pl_id:
-                pl=VolumetricPlace(pl_id, name, img, self.__map__.getOrigin(), self.__map__.getResolution()) 
+                pl.update(pl_id, name, img, self.__map__.getOrigin(), self.__map__.getResolution()) 
 
 class KBPlaces:
     def __init__(self):
@@ -403,12 +423,14 @@ class PlacesXmlParser:
         name_str = xml.getAttribute("name").encode('utf-8').decode('utf-8')
         position_str = xml.getAttribute("position")
         front_vec_str = xml.getAttribute("front_vec")
+        face_place_str = xml.getAttribute("face_place")
 
         pos = parsePointStr( position_str )
         vec_n = parsePointStr( front_vec_str )
         vec_n_len = math.sqrt(vec_n[0]**2 + vec_n[1]**2)
         vec_n = (vec_n[0]/vec_n_len, vec_n[1]/vec_n_len)
-        mc.addPointPlace(id_str, name_str, pos, vec_n)
+        face_place = str2bool(face_place_str)
+        mc.addPointPlace(id_str, name_str, pos, vec_n, face_place)
 
     def parseMapTransform(self, xml):
         # <map_transform map1="sim" map2="real" translation="-1.87296056747 -0.53914129734" rotation="-0.0821140241595" />

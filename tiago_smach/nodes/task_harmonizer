@@ -171,7 +171,7 @@ class TaskHarmonizer:
                 return
         if self.tha.isInterrupting():
             if da_id == interrupting["da_id"]:
-                print "The requested task will be started after suspension"
+                print "The requested task interrupts the running behaviour"
             else:
                 print "Another task awaits as interrupting agent"
                 print "The requested task awaits in the queue"
@@ -187,7 +187,7 @@ class TaskHarmonizer:
                     #raise Exception('There are some dynamic agents running out there...\n' + str(active_ros_nodes))
                     pass
     def scheduler(self):
-        while True:
+        while not rospy.is_shutdown():
             cost_file = open("./TH_cost", "a+")
             print "\n SCHEDULING \n"
             self.tha.schedule_new(cost_file)
@@ -201,7 +201,7 @@ class TaskHarmonizer:
                 break
 
     def switcher(self):
-        while True:
+        while not rospy.is_shutdown():
             self.tha.switchDA()
             if self._FINISH:
                 break

@@ -35,7 +35,6 @@ class TaskER(StateMachine):
 
         StateMachine.__init__(self, da_state_name=da_state_name, outcomes=['Finished', 'shutdown'], input_keys=[], output_keys=[])
         # print "EXEC: ", self.ExeFSM(self)
-        print ("TEEEEEEEST1112233")
         self.my_fsm = State(outcomes=['FINISHED','PREEMPTED','FAILED','shutdown'], input_keys=['goal','susp_data'])
         self.start_service = None
 
@@ -239,6 +238,7 @@ class TaskER(StateMachine):
                 # active_ros_nodes = get_node_names()
                 # if not '/rico_task_harmonizer' in active_ros_nodes:
                 #     return 'terminate'
+                self.tasker_instance.wait_tf()
                 rospy.sleep(1)
             return 'start'
 
@@ -252,7 +252,6 @@ class TaskER(StateMachine):
             self.tasker_instance.update_task_tf()
             rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
             print 'UpdateTask.execute'
-            rospy.sleep(3)
             #srv.shutdown()
             return 'ok'
         def is_suspension_flag(self):

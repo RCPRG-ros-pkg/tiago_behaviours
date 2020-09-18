@@ -27,14 +27,15 @@ NAVIGATION_MAX_TIME_S = 100
 
 
 def makePose(x, y, theta):
-    q = quaternion_from_euler(theta, 0, 0)
+    q = quaternion_from_euler(0, 0, theta)
     result = Pose()
     result.position.x = x
     result.position.y = y
-    result.orientation.w = q[0]
-    result.orientation.x = q[1]
-    result.orientation.y = q[2]
-    result.orientation.z = q[3]
+    result.orientation.x = q[0]
+    result.orientation.y = q[1]
+    result.orientation.z = q[2]
+    result.orientation.w = q[3]
+    print result
     return result
 
 class RememberCurrentPose(smach_rcprg.TaskER.BlockingState):
@@ -106,7 +107,7 @@ class UnderstandGoal(smach_rcprg.TaskER.BlockingState):
 
         #assert isinstance( userdata.goal_pose, PoseDescription )
 
-        print userdata.goal_pose
+        print "GOAL_POSE: ", userdata.goal_pose
         if 'place_name' in userdata.goal_pose.parameters:
             place_name = userdata.goal_pose.parameters['place_name']
             pose_valid = False
@@ -159,15 +160,35 @@ class UnderstandGoal(smach_rcprg.TaskER.BlockingState):
                     userdata.move_goal = PoseDescription( {'pose':pose, 'place_name':place_name} )
                     print 'UnderstandGoal place_name is not valid'
                     return 'error'
+                    #NORM:  [-0.9667981925794608, 0.25554110202683233]
+#angle_dest:  -2.88318530718
+# NORM:  (-1.0, 0.0)
+# angle_dest:  0.972464864357
+# pt_dest:  (3.6, 2.0)
+
+#
 
                 if pl.getType() == 'point':
                     pt_dest = pl.getPt()
                     norm = pl.getN()
                     print "NORM_0: ", norm[0]
                     print "NORM_1: ", norm[1]
-                    angle_dest = -math.atan2(norm[1], norm[0])
-                    pt = pt_dest
-                    pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
+                    if pl.isDestinationFace():
+                        print "HUMAN"
+                        print "NORM: ", norm
+                        angle_dest = -math.atan2(norm[1], -norm[0])
+                        print "angle_dest: ", angle_dest
+                        pt = pt_dest
+                        pt_dest = (pt_dest[0]+norm[0], pt_dest[1]+norm[1])
+                        print "pt_dest: ", pt_dest
+                    else:
+                        print "NO HUMAN"
+                        print "NORM: ", norm
+                        angle_dest = math.atan2(norm[1], norm[0])
+                        print "angle_dest: ", angle_dest
+                        pt = pt_dest
+                        pt_dest = (pt_dest[0], pt_dest[1])
+                        print "pt_dest: ", pt_dest
                     print 'UnderstandGoal place type: point'
                     print 'pt: {}, pt_dest: {}, norm: {}, angle_dest: {}'.format(pt, pt_dest, norm, angle_dest)
                 elif pl.getType() == 'volumetric':
@@ -560,7 +581,7 @@ class TurnAround(smach_rcprg.TaskER.BlockingState):
 
         pose = userdata.current_pose.parameters['pose']
 
-        theta, beta, alpha = euler_from_quaternion( (pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z) )
+        alpha, beta, theta = euler_from_quaternion( ( pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w) )
         print 'TurnAround current theta: {} {} {}'.format(alpha, beta, theta)
         if theta < 0:
             new_pose = makePose(pose.position.x, pose.position.y, theta+math.pi)

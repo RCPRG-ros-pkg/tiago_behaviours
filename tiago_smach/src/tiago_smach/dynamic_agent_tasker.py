@@ -87,7 +87,7 @@ class DynAgent:
         # self.main_sm.request_preempt()
     def terminateDA(self):
         if not self.terminateFlag == True:
-            if self.da_state[0] == "init" or self.getActiveStates( self.main_sm )[0][0] == "Wait":
+            if self.da_state[0] == "init" or self.getActiveStates( self.main_sm )[0][0] in ["Wait", "UpdateTask"]:
                 self.cmd_handler(CMD(recipient_name=self.name,cmd="terminate"))
                 my_status = Status()
                 my_status.da_id = self.da_id
@@ -98,12 +98,13 @@ class DynAgent:
                 self.pub_status.publish(my_status) 
                 self.terminateFlag = True
             else:
-                print "self-termination is allowed only in Init and Wait state"
+                print "DA triggered self termination flag. It is in CMD state, so the flag triggers preemption"
+                self.suspTask(["cmd", "terminate"])
         else:
             print "termination flag was already handled"
     def process_ptf_csp(self, req):
-        result = self.ptf_csp(req)
-        if result == 'self-terminate':
+        (flag, result) = self.ptf_csp(req)
+        if flag == 'self-terminate':
             print "DA_tasker: SELF terminate"
             self.terminateDA()
             return 'self-terminate'

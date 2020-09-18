@@ -47,15 +47,22 @@ class SetHumanAndDestination(smach_rcprg.TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Ustalam gdzie jest człowiek i jego cel' )
-        userdata.dest_pose = navigation.PoseDescription({'place_name':unicode(userdata.guide_destination)})
+
+        if isinstance(userdata.human_name, str):
+            human_name = userdata.human_name.decode('utf-8')
+        human_name = userdata.human_name.encode('utf-8').decode('utf-8')
+
+        if isinstance(userdata.guide_destination, str):
+            guide_destination = userdata.guide_destination.decode('utf-8')
+        guide_destination = userdata.guide_destination.encode('utf-8').decode('utf-8')
+
+        userdata.dest_pose = navigation.PoseDescription({'place_name':unicode(guide_destination)})
         places_ids = self.kb_places.getPointPlacesIds()
-        place_name = unicode(userdata.human_name + "_awaiting")
-        if place_name in places_ids:
-            userdata.human_pose = navigation.PoseDescription({'place_name':unicode(place_name)})
-        elif unicode(userdata.human_name) in places_ids:
-            userdata.human_pose = navigation.PoseDescription({'place_name':unicode(userdata.human_name)})
+        place_name = unicode(human_name + "_awaiting")
+        if unicode(human_name) in places_ids:
+            userdata.human_pose = navigation.PoseDescription({'place_name':unicode(human_name)})
         else:
-            self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Nie mam pozycji '+userdata.human_name+ u' w bazie wiedzy')
+            self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Nie mam pozycji '+human_name+ u' w bazie wiedzy')
             return 'error'
         if self.__shutdown__:
             return 'shutdown'
@@ -76,13 +83,16 @@ class IntroduceTask(smach_rcprg.TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         gender = ""
-        if userdata.human_name in ["John", "Peter"]:
+        if isinstance(userdata.human_name, str):
+            human_name = userdata.human_name.decode('utf-8')
+        human_name = userdata.human_name.encode('utf-8').decode('utf-8')
+        if human_name in ["John", "Peter"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
         if isinstance(userdata.guide_destination, str):
             guide_destination = userdata.guide_destination.decode('utf-8')
-        guide_destination = guide_destination.encode('utf-8').decode('utf-8')
+        guide_destination = userdata.guide_destination.encode('utf-8').decode('utf-8')
 
         dictionary = DisctionaryServiceClient()
         guide_dest_b = dictionary.getCases(guide_destination).getCase('dopelniacz')
@@ -110,16 +120,20 @@ class Goodbye(smach_rcprg.TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
         gender = ""
+        if isinstance(userdata.human_name, str):
+            userdata.human_name = userdata.human_name.decode('utf-8')
+        userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
+
         if userdata.human_name in ["John", "Peter"]:
             gender = "powinien Pan"
         else:
             gender = "powinna Pani"
         if isinstance(userdata.guide_destination, str):
-            guide_destination = userdata.guide_destination.decode('utf-8')
-        guide_destination = guide_destination.encode('utf-8').decode('utf-8')
+            userdata.guide_destination = userdata.guide_destination.decode('utf-8')
+        userdata.guide_destination = userdata.guide_destination.encode('utf-8').decode('utf-8')
 
         dictionary = DisctionaryServiceClient()
-        guide_dest_b = dictionary.getCases(guide_destination).getCase('dopelniacz')
+        guide_dest_b = dictionary.getCases(userdata.guide_destination).getCase('dopelniacz')
 
         self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Dotarliśmy do '+ guide_dest_b + u' dowidzenia.' )
 

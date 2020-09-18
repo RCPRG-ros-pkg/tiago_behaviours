@@ -11,6 +11,7 @@ import smach_ros
 import tiago_smach.conversation
 import tiago_smach.guide_human
 import tiago_smach.gh_csp
+import tiago_smach.update_pose
 import tiago_smach.smach_rcprg as smach_rcprg
 from tiago_smach.dynamic_agent_tasker import DynAgent
 
@@ -26,6 +27,12 @@ from TaskER.srv import CostConditionsRequest, CostConditionsResponse
 # for ExeSuspension state
 import subprocess
 import imp
+
+kb_places = None
+sim_mode = None
+human_name = None
+guide_destination = None 
+greeted = None 
 
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface, da_state_name):
@@ -203,18 +210,35 @@ class MainSM(smach_rcprg.StateMachine):
         print "handling suspension with data: ", data
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
-
+    global kb_places
+    global sim_mode
+    global human_name
+    global guide_destination
+    global greeted
+    # set flag 'self-terminate' to terminate DA if in Wait or Init state
+    flag = None
+    csp_handler = tiago_smach.gh_csp.GH_csp(human_name)
+    robot_pose_updater = tiago_smach.update_pose.UpdatePose(sim_mode, kb_places, "Rico")
+    robot_pose_updater.update_pose("/base_link")
+    robot_pose = csp_handler.get_robot_pose(sim_mode, kb_places, "Rico")
+    human_pose_updater = tiago_smach.update_pose.UpdatePose(sim_mode, kb_places, human_name)
+    human_frame = "/"+human_name
+    human_pose_updater.update_pose(human_frame)
+    human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
+    destination_pose = csp_handler.get_robot_pose(sim_mode, kb_places, guide_destination)
+    if destination_pose == 'is-volumetric':
+        destination_pose = csp_handler.get_robot_pose(sim_mode, kb_places, guide_destination, human_name)
     if ptf_id[0] == "scheduleParams":
-        return self.csp_handler.get_schedule_params("stand",guide_dest)
+        return [flag, csp_handler.get_schedule_params_gh(robot_pose, human_pose, destination_pose, human_name)]
         # return ScheduleParams(cost = 1, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
         req = ptf_id[1]
-        return SuspendConditionsResponse(cost_per_sec=1, cost_to_resume=1)
+        return [flag, csp_handler.get_suspend_conditions_gh(req, greeted.get(), human_pose)]
     elif ptf_id[0] == "startCondition":
         req = CostConditionsRequest()
         req = ptf_id[1]
-        return CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)
+        return [flag, csp_handler.get_cost_conditions_gh(req, human_pose, human_name)]# CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)]
 class Greeted():
     def __init__(self):
         self.value = False
@@ -227,16 +251,21 @@ class MyTaskER(smach_rcprg.TaskER):
         self.name = unicode(da_name)
         self.sim_mode = None
         self.conversation_interface = None
-        self.kb_places = None
+        global kb_places
+        global sim_mode
+        global human_name
+        global guide_destination
+        global greeted
+        kb_places = None
         smach_rcprg.TaskER.__init__(self,da_state_name)
         self.sis = smach_ros.IntrospectionServer(unicode(str("/"+self.name+"smach_view_server")), self, unicode(self.name))
         self.sis.start()
         places_xml_filename = rospy.get_param('/kb_places_xml')
         self.sim_mode = str(rospy.get_param('/sim_mode'))
         assert self.sim_mode in ['sim', 'gazebo', 'real']
-
+        sim_mode = self.sim_mode
         print 'Reading KB for places from file "' + places_xml_filename + '"'
-        self.kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
+        kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
 
 
         self.conversation_interface = tiago_smach.conversation.ConversationMachine([
@@ -248,18 +277,24 @@ class MyTaskER(smach_rcprg.TaskER):
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ], self.sim_mode)
         self.greeted = Greeted()
-        self.my_fsm = tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places, self.greeted)
+        greeted = self.greeted
+        self.my_fsm = tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, kb_places, self.greeted)
         human_name = None
+        guide_destination = None
         for idx in range(1, len(sys.argv), 2):
             if sys.argv[idx] == 'human_name':
                 human_name = sys.argv[idx+1]
             if sys.argv[idx] == 'guide_destination':
                 guide_destination = sys.argv[idx+1]
-
         if human_name is None:
-            raise Exception('Argument "human_name" is missing in argv: ' + str(sys.argv))   
+            raise Exception('Argument "human_name" is missing in argv: ' + str(sys.argv))  
 
-        self.csp_handler = tiago_smach.gh_csp.GH_csp(human_name)
+        if isinstance(human_name, str):
+            human_name = human_name.decode('utf-8')
+        human_name = human_name.encode('utf-8').decode('utf-8')
+        if isinstance(guide_destination, str):
+            guide_destination = guide_destination.decode('utf-8')
+        guide_destination = guide_destination.encode('utf-8').decode('utf-8')
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -280,6 +315,7 @@ class MyTaskER(smach_rcprg.TaskER):
         print "susp data: ", susp_data.getData()
         print "susp data[0]: ", susp_data.getData()[0]
         data = susp_data.getData()
+        global kb_places
         # fsm_executable = None
         # for idx in range(2, len(data), 2):
         #     print data[idx]
@@ -297,16 +333,20 @@ class MyTaskER(smach_rcprg.TaskER):
 
         # list all packages, equivalent to rospack list
         rospack.list() 
-
-        # get the file path for rospy_tutorials
-        ts_path = rospack.get_path('tiago_smach')
-        mod = imp.load_source("SuspGH",ts_path+"/src/tiago_smach/suspend_gh.py")
-        self.sis.stop()
-        self.sis.clear()
-        self.swap_state(u'ExeSuspension', mod.SuspGH(self.sim_mode, self.conversation_interface, self.kb_places))
-        self.sis.start()
-        fsm_executable = self.userdata.human_name
-        return fsm_executable
+        print "GET_SUSPEND:GREETED: ", self.greeted.get()
+        if self.greeted.get() == True:
+            # get the file path for rospy_tutorials
+            ts_path = rospack.get_path('tiago_smach')
+            mod = imp.load_source("SuspGH",ts_path+"/src/tiago_smach/suspend_gh.py")
+            self.sis.stop()
+            self.sis.clear()
+            self.swap_state(u'ExeSuspension', mod.SuspGH(self.sim_mode, self.conversation_interface, kb_places))
+            self.sis.start()
+            fsm_executable = self.userdata.human_name
+            return fsm_executable
+        else:
+            fsm_executable = None
+            return fsm_executable
 
     def exe_suspension_tf(self,fsm_es_in):
         print "My TASKER -- exe_suspension_tf"
@@ -316,7 +356,9 @@ class MyTaskER(smach_rcprg.TaskER):
         print 'ExecSuspension.execute'
         #srv.shutdown()
         print fsm_es_in
-        if fsm_es_in == "terminate task":
+        if fsm_es_in == None:
+            return 'FINISHED'
+        elif fsm_es_in == "terminate task":
             return 'shutdown'
         else:
             p = subprocess.Popen(fsm_es_in , shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -328,7 +370,6 @@ class MyTaskER(smach_rcprg.TaskER):
         print "My TASKER -- wait_tf"
         print "My TASKER"
         print "My TASKER"
-        print "GREEEEETEEEED: ", self.greeted
         pass
     def update_task_tf(self):
         print "My TASKER -- update_task_tf"
@@ -336,10 +377,11 @@ class MyTaskER(smach_rcprg.TaskER):
         print "My TASKER"
         self.sis.stop()
         self.sis.clear()
+        global kb_places
 
         imp.reload(tiago_smach.guide_human)
         print "SWAPPING"
-        self.swap_state('ExecFSM', tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, self.kb_places,self.greeted))
+        self.swap_state('ExecFSM', tiago_smach.guide_human.GuideHuman(self.sim_mode, self.conversation_interface, kb_places,self.greeted))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass
@@ -359,18 +401,18 @@ class MyTaskER(smach_rcprg.TaskER):
             raise Exception('Argument "human_name" is missing in argv: ' + str(sys.argv))    
         if guide_destination is None:
             raise Exception('Argument "guide_destination" is missing in argv: ' + str(sys.argv))        
-
-        # if isinstance(goods_name, str):
-        #     goods_name = goods_name.decode('utf-8')
-        # goods_name = goods_name.encode('utf-8').decode('utf-8')
-
-        # dictionary = DisctionaryServiceClient()
-        # goods_name_m = dictionary.getCases(goods_name).getCase('mianownik')
+        
+        if isinstance(human_name, str):
+            human_name = human_name.decode('utf-8')
+        human_name = human_name.encode('utf-8').decode('utf-8')
+        if isinstance(guide_destination, str):
+            guide_destination = guide_destination.decode('utf-8')
+        guide_destination = guide_destination.encode('utf-8').decode('utf-8')
 
         self.conversation_interface.start()
 
-        self.userdata.human_name = human_name
-        self.userdata.guide_destination = guide_destination
+        self.userdata.human_name = unicode(human_name)
+        self.userdata.guide_destination = unicode(guide_destination)
         self.userdata.fsm_es = ""
 def main():
     da_name = None

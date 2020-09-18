@@ -11,6 +11,8 @@ import tiago_smach.conversation
 import tiago_smach.human_fell
 import tiago_smach.smach_rcprg as smach_rcprg
 from tiago_smach.dynamic_agent_tasker import DynAgent
+import tiago_smach.gh_csp
+import tiago_smach.update_pose
 
 import tiago_kb.places_xml as kb_p
 
@@ -24,6 +26,10 @@ from TaskER.srv import CostConditionsRequest, CostConditionsResponse
 # for ExeSuspension state
 import subprocess
 import imp
+
+kb_places = None
+sim_mode = 'sim'
+human_name = None
 
 class Cleanup(smach_rcprg.State):
     def __init__(self, conversation_interface, da_state_name):
@@ -201,18 +207,36 @@ class MainSM(smach_rcprg.StateMachine):
         print "handling suspension with data: ", data
 def ptf_csp(ptf_id):
     print "calculating SP: ", ptf_id
+    global human_name
+    human_posture = rospy.get_param("/"+human_name+"/actor_posture", "stand")
+    # set flag 'self-terminate' to terminate DA if in Wait or Init state
+    flag = None
+    if human_posture == 'stand':
+        flag = 'self-terminate'
+    csp_handler = tiago_smach.gh_csp.GH_csp(human_name)
+    robot_pose_updater = tiago_smach.update_pose.UpdatePose(sim_mode, kb_places, "Rico")
+    robot_pose_updater.update_pose("/base_link")
+    robot_pose = csp_handler.get_robot_pose(sim_mode, kb_places, "Rico")
+    human_pose_updater = tiago_smach.update_pose.UpdatePose(sim_mode, kb_places, human_name)
+    human_frame = "/"+human_name
+    human_pose_updater.update_pose(human_frame)
+    human_pose = csp_handler.get_robot_pose(sim_mode, kb_places, human_name)
+
     if ptf_id[0] == "scheduleParams":
-        return ScheduleParams(cost = 10, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
+        return [flag, csp_handler.get_schedule_params_hf(robot_pose=robot_pose, human_pose=human_pose)]
+        #ScheduleParams(cost = 10, completion_time=1,cost_per_sec=1,final_resource_state=RobotResource())
     elif ptf_id[0] == "suspendCondition":
         req = SuspendConditionsRequest()
         req = ptf_id[1]
-        return SuspendConditionsResponse(cost_per_sec=1, cost_to_resume=1)
+        return [flag, SuspendConditionsResponse(cost_per_sec=1, cost_to_resume=1)]
     elif ptf_id[0] == "startCondition":
         req = CostConditionsRequest()
         req = ptf_id[1]
-        return CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)
+        return [flag, CostConditionsResponse(cost_per_sec=1, cost_to_complete=1)]
 class MyTaskER(smach_rcprg.TaskER):
     def __init__(self,da_state_name, da_name):
+        global kb_places
+        global sim_mode
         self.name = unicode(da_name)
         self.sim_mode = None
         self.conversation_interface = None
@@ -223,10 +247,10 @@ class MyTaskER(smach_rcprg.TaskER):
         places_xml_filename = rospy.get_param('/kb_places_xml')
         self.sim_mode = str(rospy.get_param('/sim_mode'))
         assert self.sim_mode in ['sim', 'gazebo', 'real']
-
+        sim_mode = self.sim_mode
         print 'Reading KB for places from file "' + places_xml_filename + '"'
         self.kb_places = kb_p.PlacesXmlParser(places_xml_filename).getKB()
-
+        kb_places = self.kb_places
 
         self.conversation_interface = tiago_smach.conversation.ConversationMachine([
                 ('ack',             'projects/incare-dialog-agent/agent/intents/ef92199b-d298-470c-8df3-1e1047dd70d1'),
@@ -307,6 +331,7 @@ class MyTaskER(smach_rcprg.TaskER):
         pass
     def initialise_tf(self):
         print "My TASKER -- initialise"
+        global human_name
         if len(sys.argv) < 3:
             raise Exception('Too few arguments: ' + str(sys.argv))
 
@@ -316,6 +341,9 @@ class MyTaskER(smach_rcprg.TaskER):
                 human_name = sys.argv[idx+1]
         if human_name is None:
             raise Exception('Argument "human_name" is missing in argv: ' + str(sys.argv))      
+        if isinstance(human_name, str):
+            human_name = human_name.decode('utf-8')
+        human_name = human_name.encode('utf-8').decode('utf-8')
 
         # if isinstance(goods_name, str):
         #     goods_name = goods_name.decode('utf-8')
