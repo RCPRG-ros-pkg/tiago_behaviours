@@ -116,11 +116,11 @@ class ExcuseHuman(tiago_smach.smach_rcprg.TaskER.BlockingState):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
 
         if isinstance(userdata.human_name, str):
-            userdata.human_name = userdata.human_name.decode('utf-8')
-        userdata.human_name = userdata.human_name.encode('utf-8').decode('utf-8')
+            human_name = userdata.human_name.decode('utf-8')
+        human_name = userdata.human_name.encode('utf-8').decode('utf-8')
 
         #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
-        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przepraszam Cię '+userdata.human_name+u' , mam pilne zadanie. Jadę ratować czlowieka, zaraz wracam.' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przepraszam Cię '+human_name+u' , mam pilne zadanie. Jadę ratować czlowieka, zaraz wracam.' )
         if self.sim_mode in ['sim', 'gazebo']:
             mc = self.kb_places.getMapContext('sim')
         elif self.sim_mode == 'real':

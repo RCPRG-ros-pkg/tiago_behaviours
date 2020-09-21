@@ -9,7 +9,7 @@ import rospy
 import smach
 import smach_ros
 from std_msgs.msg import String
-from TaskER.msg import Status, CMD
+from TaskER.msg import Status, CMD, ScheduleParams
 from TaskER.srv import CostConditions, SuspendConditions
 from tiago_smach.ros_node_utils import get_node_names
 import tiago_msgs.msg
@@ -87,7 +87,22 @@ class DynAgent:
         # self.main_sm.request_preempt()
     def terminateDA(self):
         if not self.terminateFlag == True:
-            if self.da_state[0] == "init" or self.getActiveStates( self.main_sm )[0][0] in ["Wait", "UpdateTask"]:
+            if self.main_sm.is_running():
+                if self.da_state[0] == "init" or self.getActiveStates( self.main_sm )[0][0] in ["Wait", "UpdateTask"]:
+                    self.cmd_handler(CMD(recipient_name=self.name,cmd="terminate"))
+                    my_status = Status()
+                    my_status.da_id = self.da_id
+                    my_status.da_name = self.name
+                    my_status.type = self.taskType
+                    self.da_state = ["END"]
+                    my_status.da_state = self.da_state
+                    self.pub_status.publish(my_status) 
+                    self.terminateFlag = True
+                else:
+                    print "DA triggered self termination flag. It is in CMD state, so the flag triggers preemption"
+                    self.suspTask(["cmd", "terminate"])
+            else:
+                print "DA -> TaskER Termination not required, because TaskER FSM is not running. Sending <END> state to THA"
                 self.cmd_handler(CMD(recipient_name=self.name,cmd="terminate"))
                 my_status = Status()
                 my_status.da_id = self.da_id
@@ -97,9 +112,6 @@ class DynAgent:
                 my_status.da_state = self.da_state
                 self.pub_status.publish(my_status) 
                 self.terminateFlag = True
-            else:
-                print "DA triggered self termination flag. It is in CMD state, so the flag triggers preemption"
-                self.suspTask(["cmd", "terminate"])
         else:
             print "termination flag was already handled"
     def process_ptf_csp(self, req):
@@ -107,7 +119,14 @@ class DynAgent:
         if flag == 'self-terminate':
             print "DA_tasker: SELF terminate"
             self.terminateDA()
-            return 'self-terminate'
+            if req[0] == 'suspendCondition':
+                return SuspendConditionsResponse()
+            elif req[0] == 'CostConditions':
+                return SuspendConditionsResponse()
+            elif req[0] == 'scheduleParams':
+                return ScheduleParams()
+            else:
+                return None
         else:
             return result
     def updateStatus(self):
@@ -196,45 +215,48 @@ class DynAgent:
         self.cost_cond_srv = rospy.Service(self.cost_cond_name, CostConditions, self.startConditionHandler)
         # Set shutdown hook
         rospy.on_shutdown( ssm.on_shutdown )
-        print "starting dignostic topic DA"
-
-        thread_conn = threading.Thread(target=self.connectionCheckThread, args=(1,))
-        thread_conn.start()
-        print "started dignostic topic DA"
-        # setup introspection server for smach viewer
-        # extend userdata with suspension request object
-        self.main_sm.userdata.susp_data = self.da_suspend_request
-        smach_thread = threading.Thread(target=self.main_sm.execute, args=(smach.UserData(),))
-        smach_thread.start()
-        # wait for start signal
-        r = rospy.Rate(1)                
-        self.start_service = rospy.Service(self.node_namespace+"/startTask", Trigger, lambda : None )
-        while not rospy.is_shutdown():
-            print "RUNNING"
-            self.updateStatus()
-            if self.startFlag:
-                break 
-            if self.terminateFlag:
-                print "RUNNING: TERM FLAG"
-                self.start_service.shutdown()
-                ssm.on_shutdown()
-                smach_thread.join()
-                thread_conn.join()
-                return
-            r.sleep()
-        self.start_service.shutdown()
-        print 'Smach thread is running'
-        self.is_initialised = True
-        # setup suspend condition handler 
-        self.susp_cond_name = self.node_namespace + "/get_suspend_conditions"
-        self.susp_cond_srv = rospy.Service(self.susp_cond_name, SuspendConditions, self.suspendConditionHandler)
-        # Block until everything is preempted
-        smach_thread.join()
-        print "SMACH JOINED"
-        thread_conn.join()
-        print "CONN Joined"
-        self.terminateFlag = True
-        print 'Smach thread is finished'
+        if not self.terminateFlag:
+            print "starting dignostic topic DA"
+            thread_conn = threading.Thread(target=self.connectionCheckThread, args=(1,))
+            thread_conn.start()
+            print "started dignostic topic DA"
+            # setup introspection server for smach viewer
+            # extend userdata with suspension request object
+            self.main_sm.userdata.susp_data = self.da_suspend_request
+            smach_thread = threading.Thread(target=self.main_sm.execute, args=(smach.UserData(),))
+            smach_thread.start()
+            # wait for start signal
+            r = rospy.Rate(1)                
+            self.start_service = rospy.Service(self.node_namespace+"/startTask", Trigger, lambda : None )
+            while not rospy.is_shutdown():
+                print "RUNNING"
+                self.updateStatus()
+                if self.startFlag:
+                    break 
+                if self.terminateFlag:
+                    print "RUNNING: TERM FLAG"
+                    self.start_service.shutdown()
+                    ssm.on_shutdown()
+                    smach_thread.join()
+                    thread_conn.join()
+                    return
+                r.sleep()
+            self.start_service.shutdown()
+            print 'Smach thread is running'
+            self.is_initialised = True
+            # setup suspend condition handler 
+            self.susp_cond_name = self.node_namespace + "/get_suspend_conditions"
+            self.susp_cond_srv = rospy.Service(self.susp_cond_name, SuspendConditions, self.suspendConditionHandler)
+            # Block until everything is preempted
+            smach_thread.join()
+            print "SMACH JOINED"
+            self.terminateDA()
+            thread_conn.join()
+            print "CONN Joined"
+            self.terminateFlag = True
+            print 'Smach thread is finished'
+        else:
+            print "DA -> have terminateFlag before TaskER FSM start"
         ssm.on_shutdown()
         print "DYN AGENT ENDED"
 
@@ -265,7 +287,7 @@ class DynAgent:
             active_ros_nodes = get_node_names()
             if not '/rico_task_harmonizer' in active_ros_nodes:
                 print 'DynAgent "' + self.name + '" detected the task_harmonizer is dead'
-                self.terminateFlag = True
+                self.terminateDA()
                 fsm_data = ["cmd", "terminate"]
                 self.suspTask(fsm_data)
                 self.main_sm.request_preempt()
@@ -290,7 +312,7 @@ class DynAgent:
             except Exception as e:
                 print 'Detected exception in dynamic agent'
                 print e
-                self.terminateFlag = True
+                self.terminateDA()
                 self.main_sm.request_preempt()
                 self.main_sm.shutdownRequest()
                 break

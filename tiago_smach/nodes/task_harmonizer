@@ -220,6 +220,7 @@ def main():
         TaskSpec('BG', 'bring_goods_tasker', 5, ['przedmiot']),
         TaskSpec('GH', 'guide_human_tasker', 5, ['human_name', 'guide_destination']),
         TaskSpec('HF', 'human_fell_tasker', 9, ['human_name']),
+        TaskSpec('GJ', 'get_jar_tasker', 9, ['object_container','bring_destination','end_pose']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/0165eceb-9621-4a7d-aecc-7a879951da18', 'move_to', 5, ['miejsce']),
         TaskSpec('projects/incare-dialog-agent/agent/intents/7acd4325-4cdd-4e15-99be-ad545f4dddd5', 'stop', 10, []),
         TaskSpec('projects/incare-dialog-agent/agent/intents/d9e96166-030b-442f-a513-d3fa2e044030', 'wander', 5, []),

@@ -46,7 +46,7 @@ class TaskER(StateMachine):
             StateMachine.add('ExecFSM',
                                     self.my_fsm,
                                     transitions={'FINISHED':'Cleanup', 'PREEMPTED':'GetSuspension', 'FAILED': 'Cleanup',
-                                    'shutdown':'shutdown'},
+                                    'shutdown':'Cleanup'},
                                     remapping={'goal':'goal', 'susp_data':'susp_data'})
             StateMachine.add('GetSuspension',
                                     TaskER.GetSuspension(self,da_state_name),
@@ -54,7 +54,7 @@ class TaskER(StateMachine):
                                     remapping={'susp_data':'susp_data', 'fsm_es_out':'fsm_es'})
             StateMachine.add('ExeSuspension',
                                     TaskER.ExeSuspension(self,da_state_name),
-                                    transitions={'FINISHED':'Wait', 'shutdown':'shutdown'},
+                                    transitions={'FINISHED':'Wait', 'shutdown':'Cleanup'},
                                     remapping={'susp_data':'susp_data','fsm_es_in':'fsm_es'})
             StateMachine.add('Wait',
                                     TaskER.Wait(self,da_state_name),
@@ -62,13 +62,13 @@ class TaskER(StateMachine):
                                     remapping={'susp_data':'susp_data'})
             StateMachine.add('UpdateTask',
                                     TaskER.UpdateTask(self,da_state_name),
-                                    transitions={'ok':'ExecFSM', 'shutdown':'shutdown'},
+                                    transitions={'ok':'ExecFSM', 'shutdown':'Cleanup'},
                                     remapping={'susp_data':'susp_data'})
             StateMachine.add('Cleanup',
                                     TaskER.Cleanup(self, da_state_name),
                                     transitions={'ok':'Finished', 'shutdown':'shutdown'},
                                     remapping={ })
-
+            
     def swap_state(self, label, state):
         """Add a state to the opened state machine.
         
