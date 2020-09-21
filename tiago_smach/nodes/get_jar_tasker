@@ -36,7 +36,7 @@ def ptf_csp(ptf_id):
     global human_name
     # human_posture = rospy.get_param("/"+human_name+"/actor_posture", "stand")
     # # set flag 'self-terminate' to terminate DA if in Wait or Init state
-    # flag = None
+    flag = None
     # if human_posture == 'stand':
     #     flag = 'self-terminate'
     # csp_handler = tiago_smach.gh_csp.GH_csp(human_name)
@@ -86,7 +86,7 @@ class MyTaskER(smach_rcprg.TaskER):
                 ('q_load',          'projects/incare-dialog-agent/agent/intents/b8743ab9-08a1-49e8-a534-abb65155c507'),
                 ('turn_around',     'projects/incare-dialog-agent/agent/intents/b4cb9f2e-2589-44dd-af14-a8f899c40ec0'),
             ], self.sim_mode)
-        self.my_fsm = tiago_smach.get_jar.GetJar(self.sim_mode, self.conversation_interface, self.kb_places)
+        self.my_fsm = tiago_smach.get_jar.BringJar(self.sim_mode, self.conversation_interface, self.kb_places)
     def shutdownRequest(self):
         print ("my-tasker -----------------------   shutdown")
         self.conversation_interface.stop()
@@ -151,7 +151,7 @@ class MyTaskER(smach_rcprg.TaskER):
 
         imp.reload(tiago_smach.get_jar)
         print "SWAPPING"
-        self.swap_state('ExecFSM', tiago_smach.get_jar.GetJar(self.sim_mode, self.conversation_interface, self.kb_places))
+        self.swap_state('ExecFSM', tiago_smach.get_jar.BringJar(self.sim_mode, self.conversation_interface, self.kb_places))
         self.sis.start()
         # self.my_fsm.set_initial_state(['MoveToKitchen'])
         pass

@@ -1,4 +1,5 @@
 #!/usr/bin/env python2
+# -*- coding: utf-8 -*- 
 
 import rospy
 import math
@@ -21,6 +22,8 @@ from shape_msgs.msg import SolidPrimitive
 from geometry_msgs.msg import Pose
 from visualization_msgs.msg import Marker
 import tf_conversions.posemath as pm
+from tiago_smach import smach_rcprg
+from tiago_smach import navigation
 
 class MarkerPublisherThread:
     def threaded_function(self, obj):
@@ -531,7 +534,7 @@ class SetBaseDestination(smach_rcprg.TaskER.BlockingState):
 
         self.conversation_interface = conversation_interface
 
-        self.description = u'Znajduję cel ruchu'
+        self.description = u'Znajduje cel ruchu'
 
     def transition_function(self, userdata):
         rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
@@ -788,10 +791,10 @@ class PutDownObject(smach_rcprg.TaskER.BlockingState):
 
         print("Set cimp mode for right lwr")
         if not self.velma_task_executor.velma.moveCartImpRightCurrentPos(start_time=0.2):
-          raise Exception("Could not set CartImp mode for right lwr")
+            raise Exception("Could not set CartImp mode for right lwr")
 
         if self.velma_task_executor.velma.waitForEffectorRight() != 0:
-          raise Exception("Right effector error")
+            raise Exception("Right effector error")
 
         print "Moving the right tool and equilibrium pose from 'wrist' to 'grip' frame..."
         T_B_Wl = self.velma_task_executor.velma.getTf("B", "Wr")
@@ -861,9 +864,7 @@ class PutDownObject(smach_rcprg.TaskER.BlockingState):
             return 'shutdown'
         return 'ok'
 
-
-
-def GetJar(smach_rcprg.StateMachine):
+class BringJar(smach_rcprg.StateMachine):
     def __init__(self, sim_mode, conversation_interface, kb_places):
         smach_rcprg.StateMachine.__init__(self, input_keys=['object_container','bring_destination','end_pose','susp_data'], output_keys=['susp_data'],
                                         outcomes=['PREEMPTED',
@@ -921,7 +922,7 @@ def GetJar(smach_rcprg.StateMachine):
                                     remapping={'max_lin_vel_in':'max_lin_vel', 'max_lin_accel_in':'max_lin_accel'})
 
             smach_rcprg.StateMachine.add('PrepareToMoveBase', PrepareToMoveBase(sim_mode, conversation_interface, worker),
-                                    transitions={'ok':'SetNavParams', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    transitions={'ok':'MoveToCabinet', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={})
 
