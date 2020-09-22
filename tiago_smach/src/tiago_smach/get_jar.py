@@ -678,16 +678,17 @@ class OpenDoor(smach_rcprg.TaskER.BlockingState):
 
         print("Finding the door handle")
         self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.30, -0.40, 0.09, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.3, -0.38, 0.09, 0.0)
 
         print("Open a lil bit")
-        self.velma_task_executor.setRightLWRImpedance(350, 350, 900, 1000, 1000, 200)
+        self.velma_task_executor.setRightLWRImpedance(200, 200, 900, 1000, 1000, 200)
         self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.50, -0.40, 0.09, 0.0)
         print("Open a lil bit more")
         self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.40, 0.0, 0.05, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.60, -0.15, 0.09, 0.0)
         self.velma_task_executor.moveMobileBase(0.0, -0.2, 0.0, 1.5)
-        self.velma_task_executor.setRightLWRImpedance(400, 400, 900, 200, 200, 200)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.20, 0.1, 0.02, 0.0)
+        self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
+        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.70, 0.1, 0.09, 0.0)
 
         if self.__shutdown__:
             return 'shutdown'
