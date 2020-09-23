@@ -855,10 +855,10 @@ class TakeOutObject(smach_rcprg.TaskER.BlockingState):
             i= i +1
         objectTF = self.velma_task_executor.velma.getTf("B", "object")
         print("lift")
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.03, 0.00, 0.15, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.05, 0.03, 0.15, 3.14)
            
         print("pull hand back")
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.9, 0.0, 0.15, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.95, 0.03, 0.15, 3.14)
         
 
         if self.__shutdown__:
