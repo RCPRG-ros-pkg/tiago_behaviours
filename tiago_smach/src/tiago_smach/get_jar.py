@@ -323,6 +323,7 @@ class VelmaTaskExecutor():
         self.velma.moveHandLeft(handDesiredState, [1, 1, 1, 1], [2000, 2000, 2000, 2000], 1000, hold=True)
         if self.velma.waitForHandRight() != 0 and self.velma.waitForHandLeft() != 0:
             raise Exception("Could not hide hands")
+        self.setJointImpedanceMode()
     def hideHand(self, hand_name):
         handDesiredState = [0.5*math.pi, 0.5*math.pi, 0.5*math.pi, math.pi]
         if hand_name == 'right':
@@ -331,6 +332,7 @@ class VelmaTaskExecutor():
             self.velma.moveHandLeft(handDesiredState, [1, 1, 1, 1], [2000, 2000, 2000, 2000], 1000, hold=True)
         if self.velma.waitForHandRight() != 0 and self.velma.waitForHandLeft() != 0:
             raise Exception("Could not hide hands")
+        self.setJointImpedanceMode()
 
     def driveToPointOnMap(self, setpoint):
         (x, y, yaw) = setpoint
@@ -404,10 +406,14 @@ class VelmaTaskExecutor():
     def setRightLWRImpedance(self, imp_p_x, imp_p_y, imp_p_z, imp_r_x, imp_r_y, imp_r_z):
         if not self.velma.moveCartImpRight(None, None, None, None, [PyKDL.Wrench(PyKDL.Vector(imp_p_x, imp_p_y, imp_p_z), PyKDL.Vector(imp_r_x, imp_r_y, imp_r_z))], [2], PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.5):
             raise Exception("setRightLWRImpedance -> Could not change impedance of right lwr")
-        if self.velma.waitForEffectorRight() != 0:
-            raise Exception("setRightLWRImpedance -> Waiting for right lwr failed")
+        i = 0
+        # while not self.velma.waitForEffectorRight() == 0:
+        #     print "setRightLWRImpedance -> Waiting for right lwr: ",self.velma.waitForEffectorRight()
+        #     if i > 5:
+        #         raise Exception("setRightLWRImpedance -> Waiting for right lwr failed")
+        #     rospy.sleep(1)
+        #     i = i +1
         rospy.sleep(1)
-
     def setLeftLWRImpedance(self, imp_p_x, imp_p_y, imp_p_z, imp_r_x, imp_r_y, imp_r_z):
         if not self.velma.moveCartImpLeft(None, None, None, None, [PyKDL.Wrench(PyKDL.Vector(imp_p_x, imp_p_y, imp_p_z), PyKDL.Vector(imp_r_x, imp_r_y, imp_r_z))], [2], PyKDL.Wrench(PyKDL.Vector(5,5,5), PyKDL.Vector(5,5,5)), start_time=0.5):
             raise Exception("Could not change impedance of left lwr")
@@ -594,6 +600,29 @@ class PrepareToMoveBase(smach_rcprg.TaskER.BlockingState):
             return 'shutdown'
         return 'ok'
 
+class PrepareToMoveWithObject(smach_rcprg.TaskER.BlockingState):
+    def __init__(self, sim_mode, conversation_interface, velma_task_executor):
+        smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
+                             outcomes=['ok', 'preemption', 'error', 'shutdown'])
+
+        self.conversation_interface = conversation_interface
+
+        self.description = u'Przygotowuję się do ruchu bazy'
+        self.velma_task_executor = velma_task_executor
+    def transition_function(self, userdata):
+        rospy.loginfo('{}: Executing state: {}'.format(rospy.get_name(), self.__class__.__name__))
+        #self.conversation_interface.addSpeakSentence( u'Zakończyłem zadanie' )
+        self.conversation_interface.speakNowBlocking( u'niekorzystne warunki pogodowe Przygotowuję się do ruchu bazy' )
+        print("Reset robot position")
+        self.velma_task_executor.moveToStartingPosition()
+
+        # print("Hiding both hands")
+        # self.velma_task_executor.hideHands()
+
+        if self.__shutdown__:
+            return 'shutdown'
+        return 'ok'
+
 class HideHands(smach_rcprg.TaskER.BlockingState):
     def __init__(self, sim_mode, conversation_interface, velma_task_executor):
         smach_rcprg.TaskER.BlockingState.__init__(self, input_keys=[], output_keys=[],
@@ -674,21 +703,27 @@ class OpenDoor(smach_rcprg.TaskER.BlockingState):
 
         print("Finding the door")
         self.velma_task_executor.setRightLWRImpedance(500, 500, 900, 1000, 1000, 200)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.25, -0.2, 0.09, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+            userdata.object_container_grab_pose, 0.25, -0.2, 0.09, 0.0)
 
         print("Finding the door handle")
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.30, -0.40, 0.09, 0.0)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.3, -0.38, 0.09, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+                userdata.object_container_grab_pose, 0.27, -0.37, 0.09, 0.0)
+        # self.velma_task_executor.moveRelativeToInCartImpMode(
+        #         userdata.object_container_grab_pose, 0.37, -0.33, 0.09, 0.0)
 
         print("Open a lil bit")
         self.velma_task_executor.setRightLWRImpedance(200, 200, 900, 1000, 1000, 200)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.50, -0.40, 0.09, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+                userdata.object_container_grab_pose, 0.50, -0.35, 0.09, 0.0)
         print("Open a lil bit more")
         self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.60, -0.15, 0.09, 0.0)
-        self.velma_task_executor.moveMobileBase(0.0, -0.2, 0.0, 1.5)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+                userdata.object_container_grab_pose, 0.65, -0.1, 0.09, 0.0)
+        self.velma_task_executor.moveMobileBase(0.0, -0.1, 0.0, 1.5)
         self.velma_task_executor.setRightLWRImpedance(300, 300, 900, 200, 200, 200)
-        self.velma_task_executor.moveRelativeToInCartImpMode(userdata.object_container_grab_pose, 0.70, 0.1, 0.09, 0.0)
+        self.velma_task_executor.moveRelativeToInCartImpMode(
+                userdata.object_container_grab_pose, 0.55, 0.1, 0.09, 0.0)
 
         if self.__shutdown__:
             return 'shutdown'
@@ -795,10 +830,10 @@ class TakeOutObject(smach_rcprg.TaskER.BlockingState):
         self.velma_task_executor.hideHands()
         print("Open hand") # CZEKAJ 
         self.velma_task_executor.openRightHand()
-        rospy.sleep(1.0)
+        rospy.sleep(3.0)
 
         self.velma_task_executor.setRightLWRImpedance(300, 1000, 1000, 2000, 1000, 1000)
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.20, 0.0, 0.08, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.05, 0.0, 0.08, 3.14)
 
         print("Add collision")
         self.marker_publisher.start()
@@ -808,13 +843,22 @@ class TakeOutObject(smach_rcprg.TaskER.BlockingState):
         self.velma_task_executor.velma.moveHandRight(handDesiredState, [1,1,1,1], [1000, 1000, 1000, 1000], 1000, hold=True)
         if self.velma_task_executor.velma.waitForHandRight() != 0:
           raise Exception("Could not catch with right hand")
-
+        i=0
+        while i< 5:
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            print "HAND CLOSED"
+            i= i +1
         objectTF = self.velma_task_executor.velma.getTf("B", "object")
         print("lift")
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.23, 0.00, 0.15, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.03, 0.00, 0.15, 3.14)
            
         print("pull hand back")
-        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.65, 0.0, 0.15, 3.14)
+        self.velma_task_executor.moveRelativeToInCartImpMode(objectTF, -0.9, 0.0, 0.15, 3.14)
         
 
         if self.__shutdown__:
@@ -986,14 +1030,14 @@ class BringJar(smach_rcprg.StateMachine):
                                     remapping={})
 
             smach_rcprg.StateMachine.add('OpenDoor', OpenDoor(sim_mode, conversation_interface, worker),
-                                    transitions={'ok':'CorrectBasePose1', 'preemption':'PREEMPTED', 'error': 'FAILED',
+                                    transitions={'ok':'PrepareToMoveBase2', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={'object_container_pose':'object_container_pose'})
 
-            smach_rcprg.StateMachine.add('CorrectBasePose1', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
-                                    transitions={'FINISHED':'PrepareToMoveBase2', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
-                                    'shutdown':'shutdown'},
-                                    remapping={'goal':'help_to_open', 'susp_data':'susp_data'})
+            # smach_rcprg.StateMachine.add('CorrectBasePose1', navigation.MoveToComplex(sim_mode, conversation_interface, kb_places),
+            #                         transitions={'FINISHED':'PrepareToMoveBase2', 'PREEMPTED':'PREEMPTED', 'FAILED': 'FAILED',
+            #                         'shutdown':'shutdown'},
+            #                         remapping={'goal':'help_to_open', 'susp_data':'susp_data'})
 
             smach_rcprg.StateMachine.add('PrepareToMoveBase2', PrepareToMoveBase(sim_mode, conversation_interface, worker),
                                     transitions={'ok':'CorrectBasePose2', 'preemption':'PREEMPTED', 'error': 'FAILED',
@@ -1025,7 +1069,7 @@ class BringJar(smach_rcprg.StateMachine):
                                     'shutdown':'shutdown'},
                                     remapping={'dest_name':'bring_destination'})
 
-            smach_rcprg.StateMachine.add('PrepareToMoveBase3', PrepareToMoveBase(sim_mode, conversation_interface, worker),
+            smach_rcprg.StateMachine.add('PrepareToMoveBase3', PrepareToMoveWithObject(sim_mode, conversation_interface, worker),
                                     transitions={'ok':'MoveToBringDestination', 'preemption':'PREEMPTED', 'error': 'FAILED',
                                     'shutdown':'shutdown'},
                                     remapping={})
