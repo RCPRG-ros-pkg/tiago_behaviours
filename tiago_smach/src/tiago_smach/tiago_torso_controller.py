@@ -63,11 +63,13 @@ class TiagoTorsoController:
 
         self.__lock__ = threading.Lock()
         self.current_height = None
+        self.initialised = False
         self.sub = rospy.Subscriber("/torso_controller/state", control_msgs.msg.JointTrajectoryControllerState, self.callback)
 
     def callback(self, data):
         self.__lock__.acquire()
         self.current_height = copy.copy(data)
+        self.initialised = True
         self.__lock__.release()
 
     def __send_goal(self, height):
@@ -87,10 +89,22 @@ class TiagoTorsoController:
         self.__send_goal(height)
 
     def get_torso_height(self):
+        i=0
         self.__lock__.acquire()
         if self.current_height is None:
-            current_height = None
+            while not self.initialised:
+                self.__lock__.release()
+                print "waiting for torso controller to initialise..."
+                rospy.sleep(1)
+                self.__lock__.acquire()
+                if i > 6:
+                    break
+            if self.current_height is None:
+                current_height = None
+            else:
+                current_height = copy.copy(self.current_height.actual.positions[0])
+            self.__lock__.release()
         else:
             current_height = copy.copy(self.current_height.actual.positions[0])
-        self.__lock__.release()
+            self.__lock__.release()
         return current_height
